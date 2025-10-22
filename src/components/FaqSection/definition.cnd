@@ -1,0 +1,5 @@
+// Definition for jsfaqnt:faqSection
+[jsfaqnt:faqSection] > jnt:content, mix:title, jmix:list, jmix:structuredContent, jsfaqmix:component orderable
+ - sectionTitle (string) mandatory i18n
+ - sectionDescription (string, richtext) i18n
+ + * (jsfaqnt:faqItem) = jsfaqnt:faqItem

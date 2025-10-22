@@ -1,0 +1,15 @@
+{
+  "searchPlaceholder": "Recherche…",
+  "noResults": "Aucun résultat",
+  "clearFilters": "Réinitialiser les filtres",
+  "featured": "À la une",
+  "featuredFirst": "Mettre les questions à la une en premier",
+  "tagsLabel": "Filtrer par tag",
+  "copyLink": "Copier le lien",
+  "copied": "Lien copié\u00a0!",
+  "expandAll": "Tout développer",
+  "collapseAll": "Tout replier",
+  "questionsHeading": "Questions",
+  "copyLinkSuccess": "Lien copié dans le presse-papiers",
+  "copyLinkError": "Impossible de copier le lien"
+}

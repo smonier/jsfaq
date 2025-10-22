@@ -1,0 +1,15 @@
+{
+  "searchPlaceholder": "Search…",
+  "noResults": "No results",
+  "clearFilters": "Clear filters",
+  "featured": "Featured",
+  "featuredFirst": "Featured first",
+  "tagsLabel": "Filter by tag",
+  "copyLink": "Copy link",
+  "copied": "Link copied!",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "questionsHeading": "Questions",
+  "copyLinkSuccess": "Link copied to clipboard",
+  "copyLinkError": "Unable to copy link"
+}

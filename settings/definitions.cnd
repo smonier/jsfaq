@@ -1,0 +1,9 @@
+<jnt = 'http://www.jahia.org/jahia/nt/1.0'>
+<jmix = 'http://www.jahia.org/jahia/mix/1.0'>
+
+<jsfaq = 'https://example.com/jsfaq/nt/1.0'>
+<jsfaqmix = 'https://example.com/jsfaq/mix/1.0'>
+<jsfaqnt = 'https://www.jahia.se.modules.com/jsfaq/nt/1.0'>
+
+// Mixin grouping FAQ components inside the Content Editor picker.
+[jsfaqmix:component] > jmix:droppableContent, jmix:accessControllableContent mixin

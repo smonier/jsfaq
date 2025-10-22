@@ -56,12 +56,14 @@ class FaqController {
   private emptyState?: HTMLElement | null;
   private destroyers: Array<() => void> = [];
   private openClassName: string;
+  private tagActiveClassName: string;
 
   constructor(root: HTMLElement, props: FaqInitialProps) {
     this.root = root;
     this.props = props;
     this.strings = props.strings;
     this.openClassName = root.getAttribute("data-faq-open-class") || "jsfaq-item--open";
+    this.tagActiveClassName = root.getAttribute("data-faq-tag-active-class") || "jsfaq-tag--active";
     this.state = {
       searchTerm: "",
       activeTags: new Set<string>(),
@@ -405,7 +407,7 @@ class FaqController {
     this.root.querySelectorAll<HTMLButtonElement>("[data-faq-tag]").forEach((button) => {
       const tag = button.getAttribute("data-faq-tag");
       const isActive = tag ? activeTags.has(tag) : false;
-      button.classList.toggle("jsfaq-tag--active", isActive);
+      button.classList.toggle(this.tagActiveClassName, isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
   }

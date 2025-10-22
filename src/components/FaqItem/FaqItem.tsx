@@ -71,16 +71,16 @@ const FaqItem = ({ item, isOpen, strings, onToggle }: FaqItemProps) => {
           className={classes["jsfaq-item__answer-content"]}
           dangerouslySetInnerHTML={{ __html: item.answerHtml }}
         />
+        {item.tags?.length ? (
+          <ul className={classes["jsfaq-item__tags"]} aria-label={strings.tagsLabel}>
+            {item.tags.map((tag) => (
+              <li key={`${item.uuid}-${tag}`} className={classes["jsfaq-item__tag"]}>
+                {tag}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
-      {item.tags?.length ? (
-        <ul className={classes["jsfaq-item__tags"]} aria-label={strings.tagsLabel}>
-          {item.tags.map((tag) => (
-            <li key={`${item.uuid}-${tag}`} className={classes["jsfaq-item__tag"]}>
-              {tag}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </article>
   );
 };

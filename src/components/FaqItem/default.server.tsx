@@ -36,7 +36,6 @@ jahiaComponent(
       "jcr:uuid",
       "question",
       "answer",
-      "tags",
       "isFeatured",
       "jcr:title",
     ]);
@@ -44,7 +43,39 @@ jahiaComponent(
     const uuid = String(props["jcr:uuid"] || "");
     const question = String(props["question"] || props["jcr:title"] || "");
     const answerHtml = String(props["answer"] || "");
-    const tags = Array.isArray(props["tags"]) ? props["tags"].map((t) => String(t)) : [];
+
+    // Get tags from Jahia's jmix:tagged
+    const tags = (() => {
+      try {
+        if (!node.hasProperty || !node.hasProperty("j:tagList")) return [];
+
+        // Try to get as property which might return an array
+        const property = node.getProperty("j:tagList");
+        if (!property) return [];
+
+        // Check if it's a multi-valued property
+        if (property.isMultiple && property.isMultiple()) {
+          const values = property.getValues();
+          const tagArray: string[] = [];
+          for (let i = 0; i < values.length; i++) {
+            const val = values[i].getString();
+            if (val) tagArray.push(val);
+          }
+          return tagArray;
+        }
+
+        // Single value - split by comma if needed
+        const tagList = property.getString();
+        if (!tagList) return [];
+        return String(tagList)
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+      } catch {
+        return [];
+      }
+    })();
+
     const isFeatured = Boolean(props["isFeatured"]);
 
     // Simple server-side rendering - client handles interactivity

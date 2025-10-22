@@ -34,6 +34,38 @@ const getChildNodes = (node: JCRNodeWrapper): JCRNodeWrapper[] => {
   }
 };
 
+// Helper to get tags from Jahia's jmix:tagged
+const getTags = (node: JCRNodeWrapper): string[] => {
+  try {
+    if (!node.hasProperty || !node.hasProperty("j:tagList")) return [];
+
+    // Try to get as property which might return an array
+    const property = node.getProperty("j:tagList");
+    if (!property) return [];
+
+    // Check if it's a multi-valued property
+    if (property.isMultiple && property.isMultiple()) {
+      const values = property.getValues();
+      const tagArray: string[] = [];
+      for (let i = 0; i < values.length; i++) {
+        const val = values[i].getString();
+        if (val) tagArray.push(val);
+      }
+      return tagArray;
+    }
+
+    // Single value - split by comma if needed
+    const tagList = property.getString();
+    if (!tagList) return [];
+    return String(tagList)
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
 jahiaComponent(
   {
     nodeType: "jsfaqnt:faqPage",
@@ -97,15 +129,9 @@ jahiaComponent(
             const itemProps = getNodeProps<Record<string, unknown>>(sectionChild, [
               "question",
               "answer",
-              "tags",
               "featured",
             ]);
-            const tags = itemProps.tags
-              ? String(itemProps.tags)
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : [];
+            const tags = getTags(sectionChild);
 
             tags.forEach((tag) => allTags.add(tag));
 
@@ -133,15 +159,9 @@ jahiaComponent(
         const itemProps = getNodeProps<Record<string, unknown>>(child, [
           "question",
           "answer",
-          "tags",
           "featured",
         ]);
-        const tags = itemProps.tags
-          ? String(itemProps.tags)
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [];
+        const tags = getTags(child);
 
         tags.forEach((tag) => allTags.add(tag));
 
@@ -204,6 +224,7 @@ jahiaComponent(
           className={classes.jsfaq}
           data-faq-root
           data-faq-open-class={classes["jsfaq-item--open"]}
+          data-faq-tag-active-class={classes["jsfaq-tag--active"]}
         >
           <header className={classes.jsfaq__header}>
             <h1 className={classes.jsfaq__title}>{title}</h1>
@@ -225,6 +246,30 @@ jahiaComponent(
               aria-label="Search FAQ"
             />
           </div>
+
+          {/* Tag filter buttons */}
+          {allTags.size > 0 && (
+            <div
+              className={classes["jsfaq-tags"]}
+              role="group"
+              aria-label="Filter by tags"
+              data-faq-tags
+            >
+              {Array.from(allTags)
+                .sort()
+                .map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={classes["jsfaq-tag"]}
+                    data-faq-tag={tag}
+                    aria-pressed="false"
+                  >
+                    {tag}
+                  </button>
+                ))}
+            </div>
+          )}
 
           <div className={classes.jsfaq__content}>
             {/* Render all child components (sections and items) */}

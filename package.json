@@ -16,7 +16,7 @@
     "dev": "vite build --watch",
     "format": "prettier --write --list-different .",
     "lint": "eslint .",
-    "package": "yarn pack --out dist/package.tgz",
+    "package": "yarn pack --out dist/jsfaq-$(date +%Y%m%d-%H%M%S).tgz",
     "watch": "run dev",
     "watch:callback": "run package && run deploy"
   },

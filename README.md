@@ -1,8 +1,10 @@
-# Jahia FAQ Module# jsfaq — Jahia FAQ Module
+# jsfaq — Jahia FAQ Module
 
 A modern, SEO-optimized FAQ module for **Jahia 8.2+** built with JavaScript/TypeScript. This module provides a complete FAQ solution with server-side rendering, client-side interactivity, and schema.org structured data for enhanced search engine visibility.SEO-ready FAQ experience for Jahia. `jsfaq` renders semantic FAQ content server-side for instant readability, enriches pages with schema.org JSON-LD, and hydrates lightweight islands to power search, tag filtering, featured ordering, and collapsible questions without a Java backend.
 
-## 🎯 Features## Key Features
+## 🎯 Features
+
+## Key Features
 
 - Server-rendered FAQPage markup with schema.org compliant JSON-LD (Question/Answer) emitted once per page.
 
@@ -78,7 +80,8 @@ A modern, SEO-optimized FAQ module for **Jahia 8.2+** built with JavaScript/Type
 
 ## Accessibility & i18n
 
-```bash- Disclosure buttons carry `aria-expanded`/`aria-controls`; answers are mapped to accessible regions.
+```bash
+- Disclosure buttons carry `aria-expanded`/`aria-controls`; answers are mapped to accessible regions.
 
 # Clone the repository- Focus rings remain visible; motion reduces automatically under `prefers-reduced-motion`.
 
@@ -106,7 +109,7 @@ yarn package
 
 yarn deploy
 
-````
+```
 
 ## 🔧 Development Setup
 
@@ -118,7 +121,7 @@ Create a `.env` file in the project root:
 JAHIA_URL=http://localhost:8080
 JAHIA_USERNAME=root
 JAHIA_PASSWORD=your-password
-````
+```
 
 ### Available Scripts
 

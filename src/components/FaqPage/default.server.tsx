@@ -98,11 +98,13 @@ jahiaComponent(
       "jcr:title",
       "intro",
       "featuredFirstDefault",
+      "enableTagFilter",
     ]);
 
     const title = String(props["jcr:title"] || "FAQ");
     const introHtml = String(props["intro"] || "");
     const featuredFirstDefault = Boolean(props["featuredFirstDefault"]);
+    const enableTagFilter = props["enableTagFilter"] !== false; // Default to true
 
     // Collect all FAQ data for client-side hydration
     const language = renderContext?.getMainResourceLocale()?.toString() || null;
@@ -188,9 +190,10 @@ jahiaComponent(
 
     const initialProps: FaqInitialProps = {
       page: faqPage,
-      tags: Array.from(allTags).sort(),
+      tags: enableTagFilter ? Array.from(allTags).sort() : [],
       language,
       featuredFirstDefault,
+      enableTagFilter,
       strings: {
         searchPlaceholder: "Search FAQ...",
         clearFilters: "Clear filters",
@@ -248,7 +251,7 @@ jahiaComponent(
           </div>
 
           {/* Tag filter buttons */}
-          {allTags.size > 0 && (
+          {enableTagFilter && allTags.size > 0 && (
             <div
               className={classes["jsfaq-tags"]}
               role="group"

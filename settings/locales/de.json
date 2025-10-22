@@ -1,0 +1,15 @@
+{
+  "searchPlaceholder": "Suchen…",
+  "noResults": "Keine Ergebnisse",
+  "clearFilters": "Filter löschen",
+  "featured": "Hervorgehoben",
+  "featuredFirst": "Hervorgehoben zuerst",
+  "tagsLabel": "Nach Tag filtern",
+  "copyLink": "Link kopieren",
+  "copied": "Link kopiert!",
+  "expandAll": "Alle ausklappen",
+  "collapseAll": "Alle einklappen",
+  "questionsHeading": "Fragen",
+  "copyLinkSuccess": "Link in die Zwischenablage kopiert",
+  "copyLinkError": "Link konnte nicht kopiert werden"
+}

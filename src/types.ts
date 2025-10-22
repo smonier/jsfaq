@@ -43,6 +43,7 @@ export type FaqInitialProps = {
   tags: string[];
   language: string | null;
   featuredFirstDefault: boolean;
+  enableTagFilter: boolean;
   strings: FaqStrings;
 };
 

@@ -1,5 +1,6 @@
 // Definition for jsfaqnt:faqPage
 [jsfaqnt:faqPage] > jnt:content, mix:title, jmix:list, jmix:structuredContent, jsfaqmix:component orderable
  - intro (string, richtext) i18n
+ - enableTagFilter (boolean) = 'false' autocreated
  + * (jsfaqnt:faqSection) = jsfaqnt:faqSection
  + * (jsfaqnt:faqItem) = jsfaqnt:faqItem

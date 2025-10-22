@@ -17,6 +17,7 @@
     "format": "prettier --write --list-different .",
     "lint": "eslint .",
     "package": "yarn pack --out dist/jsfaq-$(date +%Y%m%d-%H%M%S).tgz",
+    "release": "yarn build && yarn pack --out dist/jsfaq-v$(node -p 'require(\"./package.json\").version').tgz",
     "watch": "run dev",
     "watch:callback": "run package && run deploy"
   },

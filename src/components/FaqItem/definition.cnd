@@ -1,5 +1,5 @@
 // Definition for jsfaqnt:faqItem
-[jsfaqnt:faqItem] > jnt:content, mix:title, jsfaqmix:component, jmix:tagged orderable
+[jsfaqnt:faqItem] > jnt:content, mix:title, jmix:editorialContent, jsfaqmix:component, jmix:tagged orderable
  - question (string) mandatory i18n
  - answer (string, richtext) mandatory i18n
  - isFeatured (boolean) = false

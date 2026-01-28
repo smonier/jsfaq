@@ -16,6 +16,8 @@
   --jsfaq-featured-bg: #fef3c7;
   --jsfaq-featured-color: #92400e;
   --jsfaq-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  --jsfaq-tag-bg: #ffffff;
+  --jsfaq-tag-active-bg: #1e3a8a;
 }
 
 .jsfaq-ssr-wrapper {
@@ -233,9 +235,15 @@
 
 .jsfaq-tag--active {
   background: var(--jsfaq-tag-active-bg);
-  color: #0b3aa5;
+  color: #ffffff;
   font-weight: 600;
-  border-color: #0b3aa5;
+  border-color: #1e3a8a;
+}
+
+.jsfaq-tag--active:hover {
+  background: var(--jsfaq-tag-active-bg);
+  color: #ffffff;
+  border-color: #1e3a8a;
 }
 
 .jsfaq__content {

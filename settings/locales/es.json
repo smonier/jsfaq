@@ -8,5 +8,6 @@
   "resultCount_one": "{{count}} pregunta coincide.",
   "resultCount_many": "{{count}} preguntas coinciden.",
   "resultCount_other": "{{count}} preguntas coinciden.",
-  "noResults": "Ninguna pregunta coincide con su búsqueda."
+  "noResults": "Ninguna pregunta coincide con su búsqueda.",
+  "imageWithoutAlt": "Una imagen de este texto no tiene alternativa textual: edite la imagen en el editor y descríbala, o márquela como decorativa con un texto vacío."
 }

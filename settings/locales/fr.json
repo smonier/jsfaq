@@ -8,5 +8,6 @@
   "resultCount_one": "{{count}} question correspond.",
   "resultCount_many": "{{count}} questions correspondent.",
   "resultCount_other": "{{count}} questions correspondent.",
-  "noResults": "Aucune question ne correspond à votre recherche."
+  "noResults": "Aucune question ne correspond à votre recherche.",
+  "imageWithoutAlt": "Une image de ce texte n'a pas d'alternative textuelle : modifiez l'image dans l'éditeur et décrivez-la, ou marquez-la décorative avec un texte vide."
 }

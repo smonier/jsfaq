@@ -1,27 +1,34 @@
+import { decodeHTML, decodeHTMLAttribute } from "entities/decode";
+import { FilterXSS, escapeHtml } from "xss";
+
 /**
- * Allow-list filter for rich text written by editors (FAQ intro, section descriptions, answers).
- *
- * The module never relies on platform-side HTML filtering, because that is a site setting the
- * module cannot count on. The filter runs on the server (GraalJS has no DOM), in one pass over the
- * input, and rebuilds every tag it keeps from the parsed parts. Text is always re-encoded.
+ * Allow-list filter for the formatted text editors write (FAQ intro, section descriptions,
+ * answers). It runs on the server, in linear time, on the tag parser of the allow-list library.
  *
  * Kept: editorial markup (paragraphs, lists including definition lists, emphasis, headings, links,
- * images, figures, data tables with their header associations, quotes, code), and the `lang` and
- * `dir` of any element (a phrase in another language, RGAA 8.7).
- * Dropped: comments, scripts, styles, frames, forms and embedded objects with their content; event
- * handlers, inline styles and classes (the module and the site theme own the look); link targets
- * and titles (a new window must be announced, RGAA 13.2); image titles.
- * Link and image URLs keep only http(s), mailto, tel, relative paths, anchors and the Jahia link
+ * images, figures, data tables with their caption and header associations, quotes, code), and the
+ * `lang`, `dir` and `id` of any element (a phrase in another language, RGAA 8.7). Every other tag
+ * and attribute is left out, and so is the content of the elements whose content is not text
+ * (style sheets, frames, templates...). The module and the site theme own the look, so there are
+ * no inline styles or classes. Links open in the same window and carry no title (a new window must
+ * be announced, RGAA 13.2; a title must repeat the link text, RGAA 6.1); images carry no title.
+ * Link and image URLs are http(s), mailto, tel, relative paths, anchors and the Jahia link
  * placeholders (##cms-context##, ##doc-context##), which the render chain rewrites after the view.
+ * Attribute values are compared and written as the browser reads them (character references
+ * decoded, then encoded again).
  *
- * Ids written by editors are prefixed per block, with the anchors and table `headers` that point
- * at them, so they never collide with the ids of the page.
+ * Ids written by editors are prefixed per block, so they never collide with the ids of the page,
+ * and so are the anchors and table `headers` that point at them. An anchor to any other id (a
+ * question of the FAQ, `#q-<id>`, a section of the page) is kept as written.
  *
  * Headings are renumbered from `headingLevel` down: the highest level the editor used becomes
  * `headingLevel`, and a heading is never more than one level below the previous one (RGAA 9.1).
+ *
+ * The output is balanced: every element is closed inside the block, and a closing tag with no
+ * matching element is left out.
  */
 
-const TEXT_ATTRS = ["lang", "dir"];
+const GLOBAL_ATTRS = ["lang", "dir", "id"];
 
 const ALLOWED: Record<string, string[]> = Object.fromEntries(
   Object.entries({
@@ -41,12 +48,12 @@ const ALLOWED: Record<string, string[]> = Object.fromEntries(
     sup: [],
     small: [],
     mark: [],
-    h1: ["id"],
-    h2: ["id"],
-    h3: ["id"],
-    h4: ["id"],
-    h5: ["id"],
-    h6: ["id"],
+    h1: [],
+    h2: [],
+    h3: [],
+    h4: [],
+    h5: [],
+    h6: [],
     ul: [],
     ol: ["start", "reversed"],
     li: [],
@@ -67,25 +74,22 @@ const ALLOWED: Record<string, string[]> = Object.fromEntries(
     tbody: [],
     tfoot: [],
     tr: [],
-    th: ["scope", "colspan", "rowspan", "id", "headers"],
+    th: ["scope", "colspan", "rowspan", "headers"],
     td: ["colspan", "rowspan", "headers"],
     code: [],
     pre: [],
     kbd: [],
-  }).map(([tag, attrs]) => [tag, [...attrs, ...TEXT_ATTRS]]),
+  }).map(([tag, attrs]) => [tag, [...attrs, ...GLOBAL_ATTRS]]),
 );
 
 const VOID = new Set(["br", "hr", "wbr", "img"]);
 
-/** Elements removed together with everything up to their closing tag. */
-const DROP_WITH_CONTENT = new Set([
+/** Elements left out together with their content. */
+const WITH_CONTENT = new Set([
   "script",
   "style",
   "iframe",
-  "frame",
-  "frameset",
   "object",
-  "embed",
   "noscript",
   "noembed",
   "noframes",
@@ -94,232 +98,293 @@ const DROP_WITH_CONTENT = new Set([
   "textarea",
   "select",
   "xmp",
+  "plaintext",
   "svg",
   "math",
-  "head",
 ]);
 
-const SAFE_URL = /^(?:https?:\/\/|mailto:|tel:|\/(?!\/)|#|\.{1,2}\/|##(?:cms|doc)-context##)/i;
-const SAFE_RELATIVE = /^[\w\-./?=&%~+#]+$/; // "page.html", "files/x.pdf": no scheme, no "//host"
+/** Elements of another namespace, closed by a self-closing tag (`<svg/>`). */
+const FOREIGN = new Set(["svg", "math"]);
+
+const SAFE_URL =
+  /^(?:https?:\/\/|mailto:|tel:|\/(?![/\\])|#|\.{1,2}\/|##(?:cms|doc)-context##\/(?!\/))/i;
+const SAFE_RELATIVE = /^(?!\/\/)[\w\-./?=&%~+#]+$/; // "page.html", "files/x.pdf#p2": no scheme
 const LANG = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i; // BCP 47, loosely: "en", "fr-CA", "zh-Hant"
 const ID = /^[a-z][\w-]{0,63}$/i;
 const PREFIX = /^[a-z][\w-]{0,40}$/i;
 const NUMBER = /^\d{1,4}$/;
 const SCOPE = new Set(["row", "col", "rowgroup", "colgroup"]);
-const CHAR_REF = /&(?:#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,31});/iy;
+const DIR = new Set(["ltr", "rtl", "auto"]);
+const DEFAULT_PREFIX = "jsfaq-rt-";
 
-const NAMED: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-  colon: ":",
-  tab: "\t",
-  newline: "\n",
-  sol: "/",
-  lpar: "(",
-  rpar: ")",
-  period: ".",
-  comma: ",",
-  semi: ";",
-  equals: "=",
-  num: "#",
-  hellip: "\u2026",
-  rsquo: "\u2019",
-  lsquo: "\u2018",
-  rdquo: "\u201d",
-  ldquo: "\u201c",
-  laquo: "\u00ab",
-  raquo: "\u00bb",
-  euro: "\u20ac",
-  copy: "\u00a9",
-  reg: "\u00ae",
-  eacute: "\u00e9",
-  egrave: "\u00e8",
-  ecirc: "\u00ea",
-  agrave: "\u00e0",
-  acirc: "\u00e2",
-  ccedil: "\u00e7",
-  icirc: "\u00ee",
-  ocirc: "\u00f4",
-  ucirc: "\u00fb",
-  ugrave: "\u00f9",
-  Eacute: "\u00c9",
-};
-
-/** Decodes the character references of an attribute value, as the browser would. */
-export const decodeEntities = (value: string): string =>
-  value.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,31});?/gi, (match, ref: string) => {
-    if (ref[0] === "#") {
-      const code =
-        ref[1] === "x" || ref[1] === "X" ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "�";
-    }
-    return NAMED[ref] ?? NAMED[ref.toLowerCase()] ?? match;
-  });
-
-const escapeAttr = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-/** Re-encodes a text run: `<` and `>` always, `&` unless it starts a character reference. */
-const escapeText = (text: string): string => {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === "<") out += "&lt;";
-    else if (c === ">") out += "&gt;";
-    else if (c === "&") {
-      CHAR_REF.lastIndex = i;
-      out += CHAR_REF.test(text) ? "&" : "&amp;";
-    } else out += c;
+/** True for a control character (removed or trimmed by the URL parser) or a "\\" (read as "/"). */
+const hasIgnoredCharacter = (url: string): boolean => {
+  for (let i = 0; i < url.length; i++) {
+    const code = url.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f || code === 0x5c) return true;
   }
-  return out;
+  return false;
 };
 
 /** True when a link or image URL is allowed (see the module comment). */
 export const isSafeUrl = (value: string): boolean => {
   const url = value.trim();
-  return SAFE_URL.test(url) || (SAFE_RELATIVE.test(url) && !url.startsWith("//"));
+  if (!url || hasIgnoredCharacter(url)) return false;
+  return SAFE_URL.test(url) || (SAFE_RELATIVE.test(url) && !url.includes(":"));
 };
+
+const encodeAttr = (value: string): string =>
+  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const isSpace = (c: string) => c === " " || c === "\n" || c === "\t" || c === "\r" || c === "\f";
 
-type ParsedTag = { attrs: Array<[string, string]>; end: number; closed: boolean };
-
-/** Reads the attributes of a tag from `start` up to its `>`. */
-const parseAttributes = (html: string, start: number): ParsedTag => {
+/**
+ * The attributes of a start tag (`<a href="x" title=y>`), in one pass, as the browser reads them:
+ * names in lower case, the first of two attributes with the same name, values decoded.
+ */
+const readAttributes = (source: string, from: number, end: number): Array<[string, string]> => {
   const attrs: Array<[string, string]> = [];
   const seen = new Set<string>();
-  const n = html.length;
-  let j = start;
-  while (j < n) {
-    while (j < n && (isSpace(html[j]) || html[j] === "/")) j++;
-    if (j >= n) break;
-    if (html[j] === ">") return { attrs, end: j + 1, closed: true };
+  let j = from;
+  while (j < end) {
+    while (j < end && (isSpace(source[j]) || source[j] === "/")) j++;
+    if (j >= end) break;
     const nameStart = j;
-    if (html[j] === "=") j++;
-    while (j < n && !isSpace(html[j]) && html[j] !== "/" && html[j] !== ">" && html[j] !== "=") j++;
-    const name = html.slice(nameStart, j).toLowerCase();
-    while (j < n && isSpace(html[j])) j++;
+    if (source[j] === "=") j++;
+    while (j < end && !isSpace(source[j]) && source[j] !== "/" && source[j] !== "=") j++;
+    const name = source.slice(nameStart, j).toLowerCase();
+    while (j < end && isSpace(source[j])) j++;
     let value = "";
-    if (html[j] === "=") {
+    if (source[j] === "=") {
       j++;
-      while (j < n && isSpace(html[j])) j++;
-      const quote = html[j];
+      while (j < end && isSpace(source[j])) j++;
+      const quote = source[j];
       if (quote === '"' || quote === "'") {
-        const close = html.indexOf(quote, j + 1);
-        if (close === -1) return { attrs, end: n, closed: false };
-        value = html.slice(j + 1, close);
-        j = close + 1;
+        const close = source.indexOf(quote, j + 1);
+        const stop = close === -1 || close > end ? end : close;
+        value = source.slice(j + 1, stop);
+        j = stop + 1;
       } else {
         const valueStart = j;
-        while (j < n && !isSpace(html[j]) && html[j] !== ">") j++;
-        value = html.slice(valueStart, j);
+        while (j < end && !isSpace(source[j])) j++;
+        value = source.slice(valueStart, j);
       }
     }
     if (name && !seen.has(name)) {
       seen.add(name);
-      attrs.push([name, decodeEntities(value)]);
+      attrs.push([name, decodeHTMLAttribute(value)]);
     }
   }
-  return { attrs, end: n, closed: false };
+  return attrs;
 };
 
-/** Index just after the closing tag of a raw-text element, or the end of the input. */
-const skipContent = (lower: string, name: string, from: number): number => {
-  let at = from;
-  for (;;) {
-    const close = lower.indexOf(`</${name}`, at);
-    if (close === -1) return lower.length;
-    const after = lower[close + name.length + 2];
-    if (after === undefined || after === ">" || after === "/" || isSpace(after)) {
-      const end = lower.indexOf(">", close);
-      return end === -1 ? lower.length : end + 1;
+/** The attribute as written in the output, or "" when it is left out. */
+const writeAttribute = (tag: string, name: string, raw: string, prefix: string): string => {
+  const value = raw.trim();
+  const write = (written: string) => ` ${name}="${encodeAttr(written)}"`;
+  switch (name) {
+    case "href":
+    case "src":
+    case "cite":
+      // An empty href would still link to the page itself.
+      return isSafeUrl(value) ? write(value) : "";
+    case "alt":
+    case "title":
+      return write(raw);
+    case "lang":
+    case "hreflang":
+      return LANG.test(value) ? write(value) : "";
+    case "dir":
+      return DIR.has(value) ? write(value) : "";
+    case "id":
+      return ID.test(value) ? write(`${prefix}${value}`) : "";
+    case "headers": {
+      const ids = value.split(/\s+/).filter((id) => ID.test(id));
+      return ids.length ? write(ids.map((id) => `${prefix}${id}`).join(" ")) : "";
     }
-    at = close + name.length + 2;
+    case "role":
+      return tag === "table" && value === "presentation" ? write(value) : "";
+    case "scope":
+      return SCOPE.has(value) ? write(value) : "";
+    case "reversed":
+      return ' reversed=""';
+    default: // start, width, height, colspan, rowspan
+      return NUMBER.test(value) ? write(value) : "";
   }
 };
 
-const filterAttributes = (tag: string, attrs: Array<[string, string]>, prefix: string): string => {
-  const allowed = ALLOWED[tag];
-  const prefixed = (id: string) => (ID.test(id) ? `${prefix}${id}` : undefined);
-  let out = "";
-  const write = (name: string, value: string) => {
-    out += ` ${name}="${escapeAttr(value)}"`;
-  };
-  for (const [name, raw] of attrs) {
-    if (!allowed.includes(name)) continue;
-    const value = raw.trim();
-    switch (name) {
-      case "href":
-      case "src":
-      case "cite": {
-        if (!isSafeUrl(value)) break; // an empty href would still link to this page
-        const anchor =
-          name === "href" && value.startsWith("#") ? prefixed(value.slice(1)) : undefined;
-        write(name, anchor ? `#${anchor}` : value);
-        break;
-      }
-      case "alt":
-      case "title":
-        write(name, raw);
-        break;
-      case "lang":
-      case "hreflang":
-        if (LANG.test(value)) write(name, value);
-        break;
-      case "dir":
-        if (value === "ltr" || value === "rtl" || value === "auto") write(name, value);
-        break;
-      case "id": {
-        const id = prefixed(value);
-        if (id) write("id", id);
-        break;
-      }
-      case "headers": {
-        const ids = value.split(/\s+/).map(prefixed).filter(Boolean);
-        if (ids.length) write("headers", ids.join(" "));
-        break;
-      }
-      case "role":
-        if (value === "presentation") write("role", value);
-        break;
-      case "scope":
-        if (SCOPE.has(value)) write("scope", value);
-        break;
-      case "reversed":
-        write("reversed", "reversed");
-        break;
-      default: // start, width, height, colspan, rowspan
-        if (NUMBER.test(value)) write(name, value);
-    }
-  }
-  return out;
+/** State of one call of the filter (the library calls the hooks synchronously, in document order). */
+type Pass = {
+  prefix: string;
+  /** Output ranges left out with their content, as [start, end) positions. */
+  ranges: Array<[number, number]>;
+  dropping: string | null;
+  dropStart: number;
+  dropDepth: number;
 };
 
+let pass: Pass = { prefix: DEFAULT_PREFIX, ranges: [], dropping: null, dropStart: 0, dropDepth: 0 };
+
+const filter = new FilterXSS({
+  whiteList: ALLOWED,
+  allowCommentTag: false,
+  css: false,
+  onTag(tag, source, info) {
+    if (!info.isWhite) return undefined;
+    if (info.isClosing) return `</${tag}>`;
+    // A tag cut by the end of the text is left out, as the browser does.
+    if (!source.endsWith(">")) return "";
+    let nameEnd = 1;
+    while (nameEnd < source.length && !isSpace(source[nameEnd]) && source[nameEnd] !== ">")
+      nameEnd++;
+    const allowed = ALLOWED[tag];
+    let attrs = "";
+    for (const [name, value] of readAttributes(source, nameEnd, source.length - 1)) {
+      if (allowed.includes(name)) attrs += writeAttribute(tag, name, value, pass.prefix);
+    }
+    return `<${tag}${attrs}>`;
+  },
+  onIgnoreTag(tag, source, info) {
+    const state = pass;
+    if (state.dropping) {
+      if (tag === state.dropping) {
+        if (info.isClosing) state.dropDepth--;
+        else if (!(FOREIGN.has(tag) && source.endsWith("/>"))) state.dropDepth++;
+        if (state.dropDepth === 0) {
+          state.ranges.push([state.dropStart, info.position ?? 0]);
+          state.dropping = null;
+        }
+      }
+      return "";
+    }
+    // "<" before anything but a letter, "/", "!" or "?" is text, as the browser reads it.
+    if (!/^<[a-z/!?]/i.test(source)) return escapeHtml(source);
+    if (!info.isClosing && WITH_CONTENT.has(tag) && !(FOREIGN.has(tag) && source.endsWith("/>"))) {
+      state.dropping = tag;
+      state.dropStart = info.position ?? 0;
+      state.dropDepth = 1;
+    }
+    return "";
+  },
+});
+
+const filterTags = (html: string, prefix: string): string => {
+  pass = { prefix, ranges: [], dropping: null, dropStart: 0, dropDepth: 0 };
+  const out = filter.process(html);
+  const { ranges, dropping, dropStart } = pass;
+  // An element left out with its content and never closed runs to the end of the text.
+  if (dropping) ranges.push([dropStart, out.length]);
+  if (ranges.length === 0) return out;
+  let kept = "";
+  let at = 0;
+  for (const [start, end] of ranges) {
+    kept += out.slice(at, start);
+    at = end;
+  }
+  return kept + out.slice(at);
+};
+
+const TAG = /<(\/?)([a-z][a-z0-9]*)([^<>]*)>/g;
+const HEADING = /^h[1-6]$/;
 const clamp = (level: number) => Math.min(Math.max(level, 2), 6);
 
+type Open = { name: string; written: string };
+
 /**
- * Renumbers the headings of filtered HTML (see the module comment). Runs on the filter's own
- * output, where every heading tag is canonical, so the tag pattern is simple and linear.
+ * Second pass over the filtered HTML, where every tag is in canonical form: closes the elements in
+ * the block, renumbers the headings, prefixes the anchors to the block's own ids, and gives an
+ * image without a text alternative an empty one.
  */
-const renumberHeadings = (html: string, base: number): string => {
-  const used = [...new Set([...html.matchAll(/<h([1-6])[\s>]/g)].map((m) => Number(m[1])))].sort();
-  if (used.length === 0) return html;
-  const rank = new Map(used.map((level, index) => [level, clamp(base + index)]));
+const finish = (
+  html: string,
+  base: number,
+  prefix: string,
+): { html: string; imageWithoutAlt: boolean } => {
+  const levels = new Set<number>();
+  const ids = new Set<string>();
+  for (const match of html.matchAll(TAG)) {
+    if (match[1]) continue;
+    if (HEADING.test(match[2])) levels.add(Number(match[2][1]));
+    const id = / id="([^"]*)"/.exec(match[3]);
+    if (id) ids.add(id[1]);
+  }
+  const rank = new Map([...levels].sort().map((level, index) => [level, clamp(base + index)]));
+
+  const stack: Open[] = [];
+  const counts = new Map<string, number>();
+  const seenIds = new Set<string>();
+  let headingsOpen = 0;
   let previous = clamp(base) - 1;
-  let open = clamp(base);
-  return html.replace(
-    /<(\/?)h([1-6])([\s>])/g,
-    (_match, closing: string, level: string, next: string) => {
-      if (closing) return `</h${open}${next}`;
-      open = Math.min(rank.get(Number(level)) ?? clamp(base), previous + 1);
-      previous = open;
-      return `<h${open}${next}`;
-    },
-  );
+  let imageWithoutAlt = false;
+  let out = "";
+  let at = 0;
+
+  const close = (): string => {
+    const open = stack.pop() as Open;
+    counts.set(open.name, (counts.get(open.name) ?? 1) - 1);
+    if (HEADING.test(open.name)) headingsOpen--;
+    return `</${open.written}>`;
+  };
+  /** Closes the open elements down to and including the last one matching `test`. */
+  const closeTo = (test: (name: string) => boolean): string => {
+    let closed = "";
+    for (;;) {
+      const name = stack[stack.length - 1].name;
+      closed += close();
+      if (test(name)) return closed;
+    }
+  };
+
+  for (const match of html.matchAll(TAG)) {
+    out += html.slice(at, match.index);
+    at = match.index + match[0].length;
+    const [, closing, name] = match;
+    let attrs = match[3];
+
+    if (closing) {
+      if (name === "br")
+        out += "<br>"; // read as a line break by the browser
+      else if (HEADING.test(name)) out += headingsOpen > 0 ? closeTo((n) => HEADING.test(n)) : "";
+      else if ((counts.get(name) ?? 0) > 0) out += closeTo((n) => n === name);
+      continue;
+    }
+
+    const id = / id="([^"]*)"/.exec(attrs);
+    if (id) {
+      // The first element with an id keeps it, as the browser's anchors do.
+      if (seenIds.has(id[1])) attrs = attrs.replace(id[0], "");
+      else seenIds.add(id[1]);
+    }
+    if (name === "a") {
+      attrs = attrs.replace(/ href="#([^"]*)"/, (written, target: string) =>
+        ids.has(`${prefix}${target}`) ? ` href="#${prefix}${target}"` : written,
+      );
+    }
+    if (name === "img" && !attrs.includes(' alt="')) {
+      attrs = ` alt=""${attrs}`;
+      imageWithoutAlt = true;
+    }
+    if (VOID.has(name)) {
+      out += `<${name}${attrs}>`;
+      continue;
+    }
+
+    let written = name;
+    if (HEADING.test(name)) {
+      // A heading inside a heading closes it, as the browser does.
+      if (headingsOpen > 0) out += closeTo((n) => HEADING.test(n));
+      const level = Math.min(rank.get(Number(name[1])) ?? clamp(base), previous + 1);
+      previous = level;
+      written = `h${level}`;
+      headingsOpen++;
+    }
+    stack.push({ name, written });
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    out += `<${written}${attrs}>`;
+  }
+  out += html.slice(at);
+  while (stack.length) out += close();
+  return { html: out, imageWithoutAlt };
 };
 
 export interface SanitizeOptions {
@@ -329,90 +394,36 @@ export interface SanitizeOptions {
   idPrefix?: string;
 }
 
-/** Filtered HTML of an editor's rich text (see the module comment). */
-export const sanitizeRichText = (
+const toText = (input: unknown): string =>
+  typeof input === "string" ? input : input == null ? "" : String(input);
+
+/**
+ * Filtered HTML of an editor's formatted text (see the module comment), and whether an image had
+ * no text alternative: it gets alt="" (a missing alt fails RGAA 1.1; an empty one at least keeps
+ * screen readers from reading the file name), and edit mode tells the editor.
+ */
+export const sanitizeRichTextWithReport = (
   input: unknown,
-  { headingLevel = 3, idPrefix = "jsfaq-rt-" }: SanitizeOptions = {},
-): string => {
-  const html = typeof input === "string" ? input : input == null ? "" : String(input);
-  if (!html) return "";
-  const prefix = PREFIX.test(idPrefix) ? idPrefix : "jsfaq-rt-";
-  const lower = html.toLowerCase();
-  const n = html.length;
-  const stack: string[] = [];
-  let out = "";
-  let i = 0;
-
-  while (i < n) {
-    const lt = html.indexOf("<", i);
-    if (lt === -1) {
-      out += escapeText(html.slice(i));
-      break;
-    }
-    out += escapeText(html.slice(i, lt));
-    i = lt;
-
-    if (html.startsWith("<!--", i)) {
-      const end = html.indexOf("-->", i + 4);
-      i = end === -1 ? n : end + 3;
-      continue;
-    }
-    const next = html[i + 1] ?? "";
-    if (next === "!" || next === "?") {
-      const end = html.indexOf(">", i + 2);
-      i = end === -1 ? n : end + 1;
-      continue;
-    }
-    const closing = next === "/";
-    const nameStart = closing ? i + 2 : i + 1;
-    if (!/[a-z]/i.test(html[nameStart] ?? "")) {
-      if (closing) {
-        const end = html.indexOf(">", nameStart);
-        i = end === -1 ? n : end + 1;
-      } else {
-        out += "&lt;";
-        i += 1;
-      }
-      continue;
-    }
-    let j = nameStart;
-    while (j < n && !isSpace(html[j]) && html[j] !== "/" && html[j] !== ">") j++;
-    const name = lower.slice(nameStart, j);
-    const tag = parseAttributes(html, j);
-    i = tag.end;
-    if (!tag.closed) break; // a tag cut by the end of the input is dropped, as the browser does
-
-    if (closing) {
-      const at = stack.lastIndexOf(name);
-      if (at === -1) continue;
-      while (stack.length > at) out += `</${stack.pop()}>`;
-      continue;
-    }
-    if (name === "plaintext") break;
-    if (DROP_WITH_CONTENT.has(name)) {
-      i = skipContent(lower, name, i);
-      continue;
-    }
-    if (!Object.hasOwn(ALLOWED, name)) continue;
-
-    let attrs = filterAttributes(name, tag.attrs, prefix);
-    if (name === "img" && !attrs.includes(' alt="')) attrs += ' alt=""'; // a missing alt fails RGAA 1.1
-    out += `<${name}${attrs}>`;
-    if (!VOID.has(name)) stack.push(name);
-  }
-  while (stack.length) out += `</${stack.pop()}>`;
-
-  return renumberHeadings(out, headingLevel);
+  { headingLevel = 3, idPrefix = DEFAULT_PREFIX }: SanitizeOptions = {},
+): { html: string; imageWithoutAlt: boolean } => {
+  const html = toText(input);
+  if (!html) return { html: "", imageWithoutAlt: false };
+  const prefix = PREFIX.test(idPrefix) ? idPrefix : DEFAULT_PREFIX;
+  return finish(filterTags(html, prefix), headingLevel, prefix);
 };
 
-const BLOCK_BOUNDARY =
-  /<\/?(?:p|div|br|li|h[1-6]|tr|td|th|dt|dd|blockquote|figcaption|pre|hr)\b[^>]*>/gi;
+/** Filtered HTML of an editor's formatted text (see sanitizeRichTextWithReport). */
+export const sanitizeRichText = (input: unknown, options: SanitizeOptions = {}): string =>
+  sanitizeRichTextWithReport(input, options).html;
 
-/** Plain text of an editor's rich text, for structured data and search. */
+const BLOCK_BOUNDARY =
+  /<\/?(?:p|div|br|li|h[1-6]|tr|td|th|dt|dd|blockquote|figcaption|pre|hr)\b[^>]*>/g;
+
+/** Plain text of an editor's formatted text, as the browser shows it, for structured data. */
 export const htmlToPlainText = (input: unknown): string => {
   const clean = sanitizeRichText(input);
   if (!clean) return "";
-  return decodeEntities(clean.replace(BLOCK_BOUNDARY, " ").replace(/<[^>]*>/g, ""))
+  return decodeHTML(clean.replace(BLOCK_BOUNDARY, " ").replace(/<[^>]*>/g, ""))
     .replace(/\s+/g, " ")
     .trim();
 };

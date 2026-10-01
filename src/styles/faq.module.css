@@ -85,6 +85,16 @@
   margin-bottom: 0;
 }
 
+/* Shown in edit mode only. */
+.jsfaq-edit-hint {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid var(--jsfaq-featured-color);
+  background: var(--jsfaq-featured-bg);
+  color: var(--jsfaq-featured-color);
+  font-size: 0.875rem;
+}
+
 /* ---- Controls: search, tag filter, expand and collapse ---- */
 
 .jsfaq__controls {

@@ -1,6 +1,7 @@
 import type { FaqItem as FaqItemType, FaqStrings } from "../../types";
 import FeaturedBadge from "../FaqPage/FeaturedBadge";
 import classes from "../../styles/faq.module.css";
+import RichText from "../../server/RichText";
 
 type FaqItemProps = {
   item: FaqItemType;
@@ -67,9 +68,11 @@ const FaqItem = ({ item, isOpen, strings, onToggle }: FaqItemProps) => {
         aria-labelledby={questionId}
         data-faq-answer
       >
-        <div
+        <RichText
           className={classes["jsfaq-item__answer-content"]}
-          dangerouslySetInnerHTML={{ __html: item.answerHtml }}
+          html={item.answerHtml}
+          headingLevel={3}
+          idPrefix={`jsfaq-a-${item.uuid.slice(0, 8)}-`}
         />
         {item.tags?.length ? (
           <ul className={classes["jsfaq-item__tags"]} aria-label={strings.tagsLabel}>

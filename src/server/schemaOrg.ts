@@ -31,9 +31,19 @@ export const buildFaqJsonLdObject = (page: FaqPage): SchemaOrgFaq => {
   };
 };
 
-export const buildFaqJsonLd = (page: FaqPage): string => {
-  const jsonLd = buildFaqJsonLdObject(page);
-  return JSON.stringify(jsonLd);
-};
+/**
+ * JSON for the text of a <script> element. React writes script text as is, so every character
+ * that could end the element or start markup is written as a JSON escape. The JSON value is
+ * unchanged.
+ */
+export const jsonForScript = (value: unknown): string =>
+  JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+
+export const buildFaqJsonLd = (page: FaqPage): string => jsonForScript(buildFaqJsonLdObject(page));
 
 export default buildFaqJsonLd;

@@ -11,7 +11,9 @@ import type { JCRNodeWrapper } from "org.jahia.services.content";
 import FaqPageClient from "./FaqPage.client";
 import classes from "../../styles/faq.module.css";
 import type { FaqInitialProps, FaqPage, FaqSection, FaqItem } from "../../types";
-import { buildFaqJsonLd } from "../../server/schemaOrg";
+import { buildFaqJsonLd, jsonForScript } from "../../server/schemaOrg";
+import { htmlToPlainText } from "../../server/sanitize";
+import RichText from "../../server/RichText";
 
 type ServerProps = Record<string, unknown>;
 type ServerContext = {
@@ -142,7 +144,7 @@ jahiaComponent(
               uuid: sectionChild.getIdentifier(),
               question: String(itemProps.question || ""),
               answerHtml,
-              answerText: answerHtml.replace(/<[^>]*>/g, ""),
+              answerText: htmlToPlainText(answerHtml),
               tags: tags.length > 0 ? tags : undefined,
               isFeatured: Boolean(itemProps.featured),
             });
@@ -172,7 +174,7 @@ jahiaComponent(
           uuid: child.getIdentifier(),
           question: String(itemProps.question || ""),
           answerHtml,
-          answerText: answerHtml.replace(/<[^>]*>/g, ""),
+          answerText: htmlToPlainText(answerHtml),
           tags: tags.length > 0 ? tags : undefined,
           isFeatured: Boolean(itemProps.featured),
         });
@@ -231,12 +233,12 @@ jahiaComponent(
         >
           <header className={classes.jsfaq__header}>
             <h1 className={classes.jsfaq__title}>{title}</h1>
-            {introHtml ? (
-              <div
-                className={classes.jsfaq__intro}
-                dangerouslySetInnerHTML={{ __html: introHtml }}
-              />
-            ) : null}
+            <RichText
+              className={classes.jsfaq__intro}
+              html={introHtml}
+              headingLevel={2}
+              idPrefix={`jsfaq-i-${node.getIdentifier().slice(0, 8)}-`}
+            />
           </header>
 
           {/* Search bar */}
@@ -281,17 +283,12 @@ jahiaComponent(
         </article>
 
         {/* Serialize FAQ data for client-side hydration */}
-        <script
-          type="application/json"
-          data-faq-props
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(initialProps) }}
-        />
+        <script type="application/json" data-faq-props>
+          {jsonForScript(initialProps)}
+        </script>
 
         {/* Schema.org structured data for SEO */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: buildFaqJsonLd(faqPage) }}
-        />
+        <script type="application/ld+json">{buildFaqJsonLd(faqPage)}</script>
 
         <Island component={FaqPageClient} />
       </section>

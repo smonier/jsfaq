@@ -2,6 +2,7 @@ import { jahiaComponent, RenderChildren, getNodeProps } from "@jahia/javascript-
 import type { Resource } from "org.jahia.services.render";
 import type { JCRNodeWrapper } from "org.jahia.services.content";
 import classes from "../../styles/faq.module.css";
+import RichText from "../../server/RichText";
 
 type ServerProps = Record<string, unknown>;
 type ServerContext = {
@@ -49,12 +50,12 @@ jahiaComponent(
       <section className={classes.jsfaq__section} data-faq-section-id={uuid}>
         <header className={classes.jsfaq__section__header}>
           <h2 className={classes.jsfaq__section__title}>{sectionTitle}</h2>
-          {sectionDescription ? (
-            <div
-              className={classes.jsfaq__section__description}
-              dangerouslySetInnerHTML={{ __html: sectionDescription }}
-            />
-          ) : null}
+          <RichText
+            className={classes.jsfaq__section__description}
+            html={sectionDescription}
+            headingLevel={3}
+            idPrefix={`jsfaq-s-${uuid.slice(0, 8)}-`}
+          />
         </header>
         <div className={classes.jsfaq__section__items}>
           {/* Render all FAQ items within this section */}

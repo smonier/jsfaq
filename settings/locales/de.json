@@ -1,15 +1,12 @@
 {
-  "searchPlaceholder": "Suchen…",
-  "noResults": "Keine Ergebnisse",
-  "clearFilters": "Filter löschen",
+  "searchLabel": "Fragen durchsuchen",
+  "tagsLabel": "Nach Schlagwort filtern:",
+  "itemTags": "Schlagwörter",
   "featured": "Hervorgehoben",
-  "featuredFirst": "Hervorgehoben zuerst",
-  "tagsLabel": "Nach Tag filtern",
-  "copyLink": "Link kopieren",
-  "copied": "Link kopiert!",
-  "expandAll": "Alle ausklappen",
-  "collapseAll": "Alle einklappen",
-  "questionsHeading": "Fragen",
-  "copyLinkSuccess": "Link in die Zwischenablage kopiert",
-  "copyLinkError": "Link konnte nicht kopiert werden"
+  "expandAll": "Alle aufklappen",
+  "collapseAll": "Alle zuklappen",
+  "resultCount_one": "{{count}} Frage passt.",
+  "resultCount_other": "{{count}} Fragen passen.",
+  "noResults": "Keine Frage passt zu Ihrer Suche.",
+  "imageWithoutAlt": "Ein Bild in diesem Text hat keinen Alternativtext: Bearbeiten Sie das Bild im Editor und beschreiben Sie es, oder kennzeichnen Sie es mit einem leeren Text als dekorativ."
 }

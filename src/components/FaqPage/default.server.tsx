@@ -4,67 +4,76 @@ import {
   buildModuleFileUrl,
   jahiaComponent,
   RenderChildren,
-  getNodeProps,
 } from "@jahia/javascript-modules-library";
-import type { RenderContext, Resource } from "org.jahia.services.render";
 import type { JCRNodeWrapper } from "org.jahia.services.content";
+import { useTranslation } from "react-i18next";
 import FaqPageClient from "./FaqPage.client";
 import classes from "../../styles/faq.module.css";
-import type { FaqInitialProps, FaqPage, FaqSection, FaqItem } from "../../types";
-import { buildFaqJsonLd } from "../../server/schemaOrg";
+import RichText from "../../server/RichText";
+import { buildFaqJsonLdObject, jsonForScript, type FaqEntry } from "../../server/schemaOrg";
+import {
+  ITEM_TYPE,
+  SECTION_TYPE,
+  getChildNodes,
+  getPageContentLevel,
+  getPageLevel,
+  getString,
+  getTags,
+  idPrefixFor,
+  isType,
+  subtreePattern,
+} from "../../server/nodes";
 
-type ServerProps = Record<string, unknown>;
-type ServerContext = {
-  renderContext?: RenderContext;
-  currentResource?: Resource;
-};
+type HeadingTag = "h2" | "h3" | "h4";
 
-// Helper to get child nodes
-const getChildNodes = (node: JCRNodeWrapper): JCRNodeWrapper[] => {
-  try {
-    if (!node || typeof node.getNodes !== "function") return [];
-    const iterator = node.getNodes();
-    const children: JCRNodeWrapper[] = [];
-    while (iterator.hasNext()) {
-      children.push(iterator.nextNode() as JCRNodeWrapper);
-    }
-    return children;
-  } catch {
+/** The questions of the FAQ, in the order they are shown (direct items and section items). */
+const collectItems = (page: JCRNodeWrapper): JCRNodeWrapper[] =>
+  getChildNodes(page).flatMap((child) => {
+    if (isType(child, ITEM_TYPE)) return [child];
+    if (isType(child, SECTION_TYPE))
+      return getChildNodes(child).filter((node) => isType(node, ITEM_TYPE));
     return [];
-  }
-};
+  });
 
-// Helper to get tags from Jahia's jmix:tagged
-const getTags = (node: JCRNodeWrapper): string[] => {
-  try {
-    if (!node.hasProperty || !node.hasProperty("j:tagList")) return [];
+const CheckIcon = () => (
+  <svg
+    className={classes["jsfaq-tag__check"]}
+    width="12"
+    height="12"
+    viewBox="0 0 12 12"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M2 6.5L5 9.5L10 3"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
-    // Try to get as property which might return an array
-    const property = node.getProperty("j:tagList");
-    if (!property) return [];
-
-    // Check if it's a multi-valued property
-    if (property.isMultiple && property.isMultiple()) {
-      const values = property.getValues();
-      const tagArray: string[] = [];
-      for (let i = 0; i < values.length; i++) {
-        const val = values[i].getString();
-        if (val) tagArray.push(val);
-      }
-      return tagArray;
-    }
-
-    // Single value - split by comma if needed
-    const tagList = property.getString();
-    if (!tagList) return [];
-    return String(tagList)
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-};
+const SearchIcon = () => (
+  <svg
+    className={classes["jsfaq__search-icon"]}
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M17.5 17.5l-3.625-3.625m1.875-4.375a6.25 6.25 0 11-12.5 0 6.25 6.25 0 0112.5 0z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 jahiaComponent(
   {
@@ -72,144 +81,46 @@ jahiaComponent(
     componentType: "view",
     displayName: "FAQ Page",
   },
-  (_props: ServerProps, context: ServerContext) => {
-    const { renderContext, currentResource } = context;
-
-    // Get current node
-    const node = (() => {
+  (_props, { currentNode, currentResource, renderContext }) => {
+    const { t } = useTranslation();
+    const uuid = String(currentNode.getIdentifier());
+    const rootId = `jsfaq-${uuid}`;
+    const title = getString(currentNode, "jcr:title");
+    const level = getPageLevel(currentNode);
+    const contentLevel = getPageContentLevel(currentNode);
+    const Heading = `h${level}` as HeadingTag;
+    // The controls only work with the FAQ script, which edit mode does not run: there, every
+    // answer is shown so that editors can reach it. Elsewhere each question is a native
+    // disclosure, closed until the visitor opens it, with or without the script.
+    const interactive = !renderContext.isEditMode();
+    const enableTagFilter = (() => {
       try {
-        if (!currentResource || typeof currentResource.getNode !== "function") return null;
-        return currentResource.getNode() as JCRNodeWrapper;
+        return (
+          !currentNode.hasProperty("enableTagFilter") ||
+          currentNode.getProperty("enableTagFilter").getBoolean()
+        );
       } catch {
-        return null;
+        return false;
       }
     })();
 
-    if (!node) {
-      return (
-        <div className={classes["jsfaq-error"]}>
-          <p>FAQ content unavailable.</p>
-        </div>
-      );
+    try {
+      // The tag filter and the structured data come from the questions: re-render when one changes.
+      currentResource.getRegexpDependencies().add(subtreePattern(currentNode.getPath()));
+    } catch {
+      // the fragment then only follows its own node
     }
 
-    // Get basic page properties
-    const props = getNodeProps<Record<string, unknown>>(node, [
-      "jcr:title",
-      "intro",
-      "featuredFirstDefault",
-      "enableTagFilter",
-    ]);
-
-    const title = String(props["jcr:title"] || "FAQ");
-    const introHtml = String(props["intro"] || "");
-    const featuredFirstDefault = Boolean(props["featuredFirstDefault"]);
-    const enableTagFilter = props["enableTagFilter"] !== false; // Default to true
-
-    // Collect all FAQ data for client-side hydration
-    const language = renderContext?.getMainResourceLocale()?.toString() || null;
-    const childNodes = getChildNodes(node);
-
-    const sections: FaqSection[] = [];
-    const directItems: FaqItem[] = [];
-    const allTags = new Set<string>();
-
-    for (const child of childNodes) {
-      const nodeType = child.getPrimaryNodeTypeName();
-
-      if (nodeType === "jsfaqnt:faqSection") {
-        const sectionProps = getNodeProps<Record<string, unknown>>(child, [
-          "sectionTitle",
-          "sectionDescription",
-        ]);
-        const sectionItems: FaqItem[] = [];
-
-        // Get items within this section
-        const sectionChildren = getChildNodes(child);
-        for (const sectionChild of sectionChildren) {
-          if (sectionChild.getPrimaryNodeTypeName() === "jsfaqnt:faqItem") {
-            const itemProps = getNodeProps<Record<string, unknown>>(sectionChild, [
-              "question",
-              "answer",
-              "featured",
-            ]);
-            const tags = getTags(sectionChild);
-
-            tags.forEach((tag) => allTags.add(tag));
-
-            const answerHtml = String(itemProps.answer || "");
-            sectionItems.push({
-              uuid: sectionChild.getIdentifier(),
-              question: String(itemProps.question || ""),
-              answerHtml,
-              answerText: answerHtml.replace(/<[^>]*>/g, ""),
-              tags: tags.length > 0 ? tags : undefined,
-              isFeatured: Boolean(itemProps.featured),
-            });
-          }
-        }
-
-        sections.push({
-          uuid: child.getIdentifier(),
-          sectionTitle: String(sectionProps.sectionTitle || ""),
-          sectionDescription: sectionProps.sectionDescription
-            ? String(sectionProps.sectionDescription)
-            : undefined,
-          items: sectionItems,
-        });
-      } else if (nodeType === "jsfaqnt:faqItem") {
-        const itemProps = getNodeProps<Record<string, unknown>>(child, [
-          "question",
-          "answer",
-          "featured",
-        ]);
-        const tags = getTags(child);
-
-        tags.forEach((tag) => allTags.add(tag));
-
-        const answerHtml = String(itemProps.answer || "");
-        directItems.push({
-          uuid: child.getIdentifier(),
-          question: String(itemProps.question || ""),
-          answerHtml,
-          answerText: answerHtml.replace(/<[^>]*>/g, ""),
-          tags: tags.length > 0 ? tags : undefined,
-          isFeatured: Boolean(itemProps.featured),
-        });
-      }
-    }
-
-    // Build initial props for client
-    const faqPage: FaqPage = {
-      uuid: node.getIdentifier(),
-      title,
-      introHtml: introHtml || undefined,
-      sections,
-      items: directItems,
-    };
-
-    const initialProps: FaqInitialProps = {
-      page: faqPage,
-      tags: enableTagFilter ? Array.from(allTags).sort() : [],
-      language,
-      featuredFirstDefault,
-      enableTagFilter,
-      strings: {
-        searchPlaceholder: "Search FAQ...",
-        clearFilters: "Clear filters",
-        featured: "Featured",
-        featuredFirst: "Featured first",
-        tagsLabel: "Filter by tags",
-        copyLink: "Copy link",
-        copied: "Copied!",
-        copyLinkSuccess: "Link copied to clipboard",
-        copyLinkError: "Failed to copy link",
-        questionsHeading: "Questions",
-        noResults: "No results found",
-        expandAll: "Expand all",
-        collapseAll: "Collapse all",
-      },
-    };
+    const items = collectItems(currentNode);
+    const tags = enableTagFilter
+      ? [...new Set(items.flatMap((item) => getTags(item)))].sort((a, b) => a.localeCompare(b))
+      : [];
+    const entries: FaqEntry[] = items.map((item) => ({
+      uuid: String(item.getIdentifier()),
+      question: getString(item, "question") || getString(item, "jcr:title"),
+      answerHtml: getString(item, "answer"),
+    }));
+    const jsonLd = buildFaqJsonLdObject(entries);
 
     const cssResource = (() => {
       try {
@@ -219,81 +130,107 @@ jahiaComponent(
       }
     })();
 
+    const intro = (
+      <RichText
+        className={classes.jsfaq__intro}
+        html={getString(currentNode, "intro")}
+        headingLevel={contentLevel}
+        idPrefix={idPrefixFor(currentNode, "i")}
+      />
+    );
+
     return (
       <section className={classes["jsfaq-ssr-wrapper"]}>
         <AddResources type="css" resources={cssResource} />
 
-        <article
+        <div
           className={classes.jsfaq}
+          id={rootId}
           data-faq-root
-          data-faq-open-class={classes["jsfaq-item--open"]}
           data-faq-tag-active-class={classes["jsfaq-tag--active"]}
+          data-faq-highlight-class={classes["jsfaq-highlight"]}
         >
-          <header className={classes.jsfaq__header}>
-            <h1 className={classes.jsfaq__title}>{title}</h1>
-            {introHtml ? (
-              <div
-                className={classes.jsfaq__intro}
-                dangerouslySetInnerHTML={{ __html: introHtml }}
-              />
-            ) : null}
-          </header>
-
-          {/* Search bar */}
-          <div className={classes["jsfaq__search"]}>
-            <input
-              type="search"
-              className={classes["jsfaq__search-input"]}
-              placeholder="Search FAQ..."
-              data-faq-search
-              aria-label="Search FAQ"
-            />
-          </div>
-
-          {/* Tag filter buttons */}
-          {enableTagFilter && allTags.size > 0 && (
-            <div
-              className={classes["jsfaq-tags"]}
-              role="group"
-              aria-label="Filter by tags"
-              data-faq-tags
-            >
-              {Array.from(allTags)
-                .sort()
-                .map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className={classes["jsfaq-tag"]}
-                    data-faq-tag={tag}
-                    aria-pressed="false"
-                  >
-                    {tag}
-                  </button>
-                ))}
-            </div>
+          {title ? (
+            <header className={classes.jsfaq__header}>
+              <Heading className={classes.jsfaq__title}>{title}</Heading>
+              {intro}
+            </header>
+          ) : (
+            intro
           )}
 
+          {interactive && entries.length > 0 ? (
+            // Shown from the first paint, so the questions do not move when the FAQ script starts;
+            // hidden by the style sheet when the browser runs no script (they would do nothing).
+            <div className={classes.jsfaq__controls} data-faq-controls>
+              <div className={classes.jsfaq__search}>
+                <label className={classes["jsfaq__search-label"]} htmlFor={`${rootId}-search`}>
+                  {t("searchLabel")}
+                </label>
+                <div className={classes["jsfaq__search-field"]}>
+                  <SearchIcon />
+                  <input
+                    type="search"
+                    id={`${rootId}-search`}
+                    className={classes["jsfaq__search-input"]}
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-faq-search
+                  />
+                </div>
+              </div>
+
+              {tags.length > 0 ? (
+                <div
+                  className={classes["jsfaq-tags"]}
+                  role="group"
+                  aria-labelledby={`${rootId}-tags`}
+                >
+                  <span className={classes["jsfaq-tags__label"]} id={`${rootId}-tags`}>
+                    {t("tagsLabel")}
+                  </span>
+                  <ul className={classes["jsfaq-tags__list"]}>
+                    {tags.map((tag) => (
+                      <li key={tag}>
+                        <button
+                          type="button"
+                          className={classes["jsfaq-tag"]}
+                          data-faq-tag={tag}
+                          aria-pressed="false"
+                        >
+                          <CheckIcon />
+                          {tag}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className={classes.jsfaq__toolbar}>
+                <p className={classes.jsfaq__status} role="status" data-faq-status />
+                <div className={classes["jsfaq__toolbar-actions"]}>
+                  <button type="button" className={classes["jsfaq-button"]} data-faq-expand-all>
+                    {t("expandAll")}
+                  </button>
+                  <button type="button" className={classes["jsfaq-button"]} data-faq-collapse-all>
+                    {t("collapseAll")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className={classes.jsfaq__content}>
-            {/* Render all child components (sections and items) */}
             <RenderChildren />
           </div>
-        </article>
 
-        {/* Serialize FAQ data for client-side hydration */}
-        <script
-          type="application/json"
-          data-faq-props
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(initialProps) }}
-        />
+          {interactive ? <Island component={FaqPageClient} /> : null}
+        </div>
 
-        {/* Schema.org structured data for SEO */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: buildFaqJsonLd(faqPage) }}
-        />
-
-        <Island component={FaqPageClient} />
+        {jsonLd.mainEntity.length > 0 ? (
+          <script type="application/ld+json">{jsonForScript(jsonLd)}</script>
+        ) : null}
       </section>
     );
   },

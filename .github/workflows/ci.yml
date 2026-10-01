@@ -16,6 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Yarn 4 (packageManager in package.json) comes through Corepack, also for the cache step.
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -27,6 +31,9 @@ jobs:
 
       - name: Lint
         run: yarn lint
+
+      - name: Unit tests
+        run: yarn test
 
       - name: Build
         run: yarn build

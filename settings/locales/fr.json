@@ -1,15 +1,13 @@
 {
-  "searchPlaceholder": "Recherche…",
-  "noResults": "Aucun résultat",
-  "clearFilters": "Réinitialiser les filtres",
+  "searchLabel": "Rechercher dans les questions",
+  "tagsLabel": "Filtrer par mot-clé :",
+  "itemTags": "Mots-clés",
   "featured": "À la une",
-  "featuredFirst": "Mettre les questions à la une en premier",
-  "tagsLabel": "Filtrer par tag",
-  "copyLink": "Copier le lien",
-  "copied": "Lien copié\u00a0!",
-  "expandAll": "Tout développer",
+  "expandAll": "Tout déplier",
   "collapseAll": "Tout replier",
-  "questionsHeading": "Questions",
-  "copyLinkSuccess": "Lien copié dans le presse-papiers",
-  "copyLinkError": "Impossible de copier le lien"
+  "resultCount_one": "{{count}} question correspond.",
+  "resultCount_many": "{{count}} questions correspondent.",
+  "resultCount_other": "{{count}} questions correspondent.",
+  "noResults": "Aucune question ne correspond à votre recherche.",
+  "imageWithoutAlt": "Une image de ce texte n'a pas d'alternative textuelle : modifiez l'image dans l'éditeur et décrivez-la, ou marquez-la décorative avec un texte vide."
 }

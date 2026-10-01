@@ -2,5 +2,7 @@
 [jsfaqnt:faqPage] > jnt:content, mix:title, jmix:list, jmix:structuredContent, jsfaqmix:component orderable
  - intro (string, richtext) i18n
  - enableTagFilter (boolean) = 'false' autocreated
+ // cnd-check-ignore(missingI18n): a heading level, the same in every language
+ - headingLevel (string, choicelist[resourceBundle]) = '2' autocreated < '2', '3', '4'
  + * (jsfaqnt:faqSection) = jsfaqnt:faqSection
  + * (jsfaqnt:faqItem) = jsfaqnt:faqItem

@@ -48,7 +48,7 @@ jahiaComponent(
         tags={getTags(currentNode)}
         isFeatured={isFeatured}
         level={placement.level}
-        interactive={Boolean(placement.page) && !renderContext.isEditMode()}
+        interactive={!renderContext.isEditMode()}
         strings={{ featured: t("featured"), itemTags: t("itemTags") }}
       />
     );

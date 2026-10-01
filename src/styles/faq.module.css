@@ -102,6 +102,13 @@
   gap: 1rem;
 }
 
+/* The search, tag filter and expand/collapse buttons need the FAQ script. */
+@media (scripting: none) {
+  .jsfaq__controls {
+    display: none;
+  }
+}
+
 .jsfaq__search {
   display: grid;
   gap: 0.5rem;
@@ -305,42 +312,31 @@
     box-shadow var(--jsfaq-transition);
 }
 
-.jsfaq-item:focus {
-  outline: none; /* focus target of a #q- link only; the question button gets the visible focus */
-}
-
-.jsfaq-item--open {
+.jsfaq-item[open] {
   border-color: var(--jsfaq-accent-color);
-}
-
-.jsfaq-item__heading {
-  margin: 0;
-  font: inherit;
 }
 
 .jsfaq-item__label,
 .jsfaq-item__toggle {
-  box-sizing: border-box;
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
+  display: block;
   padding: 1.25rem 1.5rem;
 }
 
+/* The question is a native disclosure: the browser's marker gives way to the chevron. */
 .jsfaq-item__toggle {
-  flex-wrap: nowrap;
-  border: none;
+  list-style: none;
   border-radius: calc(var(--jsfaq-radius) - 2px);
-  margin: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
   cursor: pointer;
   color: var(--jsfaq-text-color);
   transition: background-color var(--jsfaq-transition);
+}
+
+.jsfaq-item__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.jsfaq-item__toggle::marker {
+  content: "";
 }
 
 .jsfaq-item__toggle:hover .jsfaq-item__question {
@@ -351,6 +347,20 @@
 .jsfaq-item__toggle:focus-visible {
   outline: 3px solid transparent;
   box-shadow: var(--jsfaq-focus-ring);
+}
+
+.jsfaq-item__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  font: inherit;
+}
+
+.jsfaq-item__toggle .jsfaq-item__heading {
+  flex-wrap: nowrap;
 }
 
 .jsfaq-item__question {
@@ -369,7 +379,7 @@
   transition: transform var(--jsfaq-transition);
 }
 
-.jsfaq-item__toggle[aria-expanded="true"] .jsfaq-item__icon {
+.jsfaq-item[open] > .jsfaq-item__toggle .jsfaq-item__icon {
   transform: rotate(180deg);
 }
 

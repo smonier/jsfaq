@@ -21,6 +21,7 @@ import {
   getTags,
   idPrefixFor,
   isType,
+  subtreePattern,
 } from "../../server/nodes";
 
 type HeadingTag = "h2" | "h3" | "h4";
@@ -80,7 +81,7 @@ jahiaComponent(
     componentType: "view",
     displayName: "FAQ Page",
   },
-  (_props, { currentNode, renderContext }) => {
+  (_props, { currentNode, currentResource, renderContext }) => {
     const { t } = useTranslation();
     const uuid = String(currentNode.getIdentifier());
     const rootId = `jsfaq-${uuid}`;
@@ -89,7 +90,8 @@ jahiaComponent(
     const contentLevel = getPageContentLevel(currentNode);
     const Heading = `h${level}` as HeadingTag;
     // The controls only work with the FAQ script, which edit mode does not run: there, every
-    // answer is shown so that editors can reach it.
+    // answer is shown so that editors can reach it. Elsewhere each question is a native
+    // disclosure, closed until the visitor opens it, with or without the script.
     const interactive = !renderContext.isEditMode();
     const enableTagFilter = (() => {
       try {
@@ -101,6 +103,13 @@ jahiaComponent(
         return false;
       }
     })();
+
+    try {
+      // The tag filter and the structured data come from the questions: re-render when one changes.
+      currentResource.getRegexpDependencies().add(subtreePattern(currentNode.getPath()));
+    } catch {
+      // the fragment then only follows its own node
+    }
 
     const items = collectItems(currentNode);
     const tags = enableTagFilter
@@ -138,7 +147,6 @@ jahiaComponent(
           className={classes.jsfaq}
           id={rootId}
           data-faq-root
-          data-faq-open-class={classes["jsfaq-item--open"]}
           data-faq-tag-active-class={classes["jsfaq-tag--active"]}
           data-faq-highlight-class={classes["jsfaq-highlight"]}
         >
@@ -152,8 +160,9 @@ jahiaComponent(
           )}
 
           {interactive && entries.length > 0 ? (
-            // Hidden until the FAQ script runs: without it, these controls would do nothing.
-            <div className={classes.jsfaq__controls} data-faq-controls hidden>
+            // Shown from the first paint, so the questions do not move when the FAQ script starts;
+            // hidden by the style sheet when the browser runs no script (they would do nothing).
+            <div className={classes.jsfaq__controls} data-faq-controls>
               <div className={classes.jsfaq__search}>
                 <label className={classes["jsfaq__search-label"]} htmlFor={`${rootId}-search`}>
                   {t("searchLabel")}
@@ -215,13 +224,13 @@ jahiaComponent(
           <div className={classes.jsfaq__content}>
             <RenderChildren />
           </div>
+
+          {interactive ? <Island component={FaqPageClient} /> : null}
         </div>
 
         {jsonLd.mainEntity.length > 0 ? (
           <script type="application/ld+json">{jsonForScript(jsonLd)}</script>
         ) : null}
-
-        {interactive ? <Island component={FaqPageClient} props={{ rootId }} /> : null}
       </section>
     );
   },

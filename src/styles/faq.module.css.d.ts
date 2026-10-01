@@ -29,7 +29,7 @@ declare const classes: {
   readonly "jsfaq__section__title": string;
   readonly "jsfaq__section__items": string;
   readonly "jsfaq-item": string;
-  readonly "jsfaq-item--open": string;
+  readonly "jsfaq-edit-hint": string;
   readonly "jsfaq-item__heading": string;
   readonly "jsfaq-item__label": string;
   readonly "jsfaq-item__toggle": string;

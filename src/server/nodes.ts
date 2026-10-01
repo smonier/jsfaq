@@ -118,3 +118,12 @@ export const placeItem = (item: JCRNodeWrapper): Placement => {
 /** Short, stable prefix for the ids of a node's rich text. */
 export const idPrefixFor = (node: JCRNodeWrapper, part: string): string =>
   `jsfaq-${part}-${String(node.getIdentifier()).slice(0, 8)}-`;
+
+/** The path as a regular expression that matches only itself. */
+export const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Cache dependency pattern of a node and everything under it: a fragment built from the node's
+ * descendants (tags, structured data) is refreshed when any of them changes.
+ */
+export const subtreePattern = (path: string): string => `^${escapeRegExp(path)}(/.*)?$`;

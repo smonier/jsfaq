@@ -23,7 +23,7 @@ const RichText = ({
   headingLevel: number;
   idPrefix: string;
 }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation("jsfaq");
   const { renderContext } = useServerContext();
   const { html: clean, imageWithoutAlt } = sanitizeRichTextWithReport(html, {
     headingLevel,

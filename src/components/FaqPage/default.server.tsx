@@ -82,7 +82,7 @@ jahiaComponent(
     displayName: "FAQ Page",
   },
   (_props, { currentNode, currentResource, renderContext }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation("jsfaq");
     const uuid = String(currentNode.getIdentifier());
     const rootId = `jsfaq-${uuid}`;
     const title = getString(currentNode, "jcr:title");

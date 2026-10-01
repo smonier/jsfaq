@@ -1,11 +1,17 @@
+/*
+ * Defaults of the FAQ look. A host overrides them on an ancestor (a class beats :root). Variables
+ * read with a fallback at the point of use (var(--jsfaq-x, <default>)) have no :root value, so that
+ * an override of the variable they fall back on still applies.
+ * Colour pairs meet 4.5:1 for text and 3:1 for focus rings and control borders on the surfaces.
+ */
 :root {
   --jsfaq-font-family:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
   --jsfaq-text-color: #0f172a;
   --jsfaq-text-secondary: #475569;
   --jsfaq-muted-color: #64748b;
-  --jsfaq-accent-color: #3b82f6;
-  --jsfaq-accent-hover: #2563eb;
+  --jsfaq-accent-color: #1d4ed8;
+  --jsfaq-accent-hover: #1e40af;
   --jsfaq-accent-light: #dbeafe;
   --jsfaq-border-color: #e2e8f0;
   --jsfaq-radius: 12px;
@@ -15,7 +21,7 @@
   --jsfaq-transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --jsfaq-featured-bg: #fef3c7;
   --jsfaq-featured-color: #92400e;
-  --jsfaq-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  --jsfaq-focus-ring: 0 0 0 3px #1d4ed8;
   --jsfaq-tag-bg: #ffffff;
   --jsfaq-tag-active-bg: #1e3a8a;
 }
@@ -23,10 +29,15 @@
 .jsfaq-ssr-wrapper {
   font-family: var(--jsfaq-font-family);
   color: var(--jsfaq-text-color);
-  background: #ffffff;
+  background: var(--jsfaq-surface, #ffffff);
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem 1rem;
+}
+
+/* The `hidden` attribute wins over the display of the classes below. */
+.jsfaq-ssr-wrapper [hidden] {
+  display: none !important;
 }
 
 @media (min-width: 768px) {
@@ -42,186 +53,127 @@
 }
 
 .jsfaq__header {
-  text-align: center;
   padding-bottom: 1rem;
   border-bottom: 2px solid var(--jsfaq-border-color);
 }
 
 .jsfaq__title {
-  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-size: clamp(1.5rem, 3vw, 2rem);
   font-weight: 700;
+  line-height: 1.25;
   margin: 0 0 0.75rem 0;
   color: var(--jsfaq-text-color);
-  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .jsfaq__intro {
   font-size: 1.125rem;
   color: var(--jsfaq-text-secondary);
   line-height: 1.7;
-  max-width: 700px;
-  margin: 0 auto;
+  max-width: 70ch;
+}
+
+.jsfaq__intro > :first-child,
+.jsfaq__section__description > :first-child,
+.jsfaq-item__answer-content > :first-child {
+  margin-top: 0;
+}
+
+.jsfaq__intro > :last-child,
+.jsfaq__section__description > :last-child,
+.jsfaq-item__answer-content > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---- Controls: search, tag filter, expand and collapse ---- */
+
+.jsfaq__controls {
+  display: grid;
+  gap: 1rem;
 }
 
 .jsfaq__search {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.jsfaq__search-label {
+  font-weight: 600;
+  color: var(--jsfaq-text-color);
+}
+
+.jsfaq__search-field {
   position: relative;
 }
 
+/* An element rather than a background image: hosts may reset the field's background. */
+.jsfaq__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  color: var(--jsfaq-muted-color);
+  pointer-events: none;
+}
+
 .jsfaq__search-input {
+  box-sizing: border-box;
   width: 100%;
-  padding: 1rem 1.25rem;
-  padding-left: 3rem;
-  font-size: 1rem;
-  border: 2px solid var(--jsfaq-border-color);
+  min-width: 0;
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  font: inherit;
+  border: 2px solid var(--jsfaq-control-border, var(--jsfaq-muted-color));
   border-radius: var(--jsfaq-radius);
-  background: #ffffff;
+  background-color: var(--jsfaq-surface-raised, #ffffff);
   color: var(--jsfaq-text-color);
   transition:
     border-color var(--jsfaq-transition),
     box-shadow var(--jsfaq-transition);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M17.5 17.5l-3.625-3.625m1.875-4.375a6.25 6.25 0 11-12.5 0 6.25 6.25 0 0112.5 0z' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: 1rem center;
-  background-size: 20px 20px;
 }
 
-.jsfaq__search-input:focus {
-  outline: none;
+.jsfaq__search-input:focus-visible {
+  outline: 3px solid transparent; /* shows in forced-colors mode, where box shadows do not */
   border-color: var(--jsfaq-accent-color);
   box-shadow: var(--jsfaq-focus-ring);
-}
-
-.jsfaq__search-input::placeholder {
-  color: var(--jsfaq-muted-color);
-}
-
-.jsfaq__controls {
-  display: grid;
-  gap: 0.75rem;
-  align-items: start;
-}
-
-@media (min-width: 720px) {
-  .jsfaq__controls {
-    grid-template-columns: 1fr auto;
-    align-items: center;
-  }
-}
-
-.jsfaq-search {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  background: rgba(15, 23, 42, 0.04);
-  padding: 0.75rem;
-  border-radius: calc(var(--jsfaq-radius) * 0.66);
-}
-
-.jsfaq-search__field {
-  flex: 1 1 220px;
-}
-
-.jsfaq-search__field input[type="search"] {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--jsfaq-border-color);
-  background: #ffffff;
-  font-size: 1rem;
-  transition:
-    border-color var(--jsfaq-transition),
-    box-shadow var(--jsfaq-transition);
-}
-
-.jsfaq-search__field input[type="search"]:focus-visible {
-  border-color: var(--jsfaq-accent-color);
-  outline: none;
-  box-shadow: var(--jsfaq-focus-ring);
-}
-
-.jsfaq-search__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.jsfaq-search__toggles {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.jsfaq-search__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.95rem;
-  color: var(--jsfaq-muted-color);
-}
-
-.jsfaq-search__toggle input[type="checkbox"] {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--jsfaq-accent-color);
-}
-
-.jsfaq-button {
-  border: none;
-  border-radius: 999px;
-  padding: 0.55rem 0.95rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition:
-    background-color var(--jsfaq-transition),
-    color var(--jsfaq-transition),
-    transform var(--jsfaq-transition);
-}
-
-.jsfaq-button--ghost {
-  background: rgba(15, 23, 42, 0.05);
-  color: var(--jsfaq-muted-color);
-}
-
-.jsfaq-button--ghost:hover,
-.jsfaq-button--ghost:focus-visible {
-  background: rgba(15, 23, 42, 0.08);
-}
-
-.jsfaq-button--ghost:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.jsfaq-button--link {
-  background: transparent;
-  color: var(--jsfaq-accent-color);
-  padding: 0;
-  font-weight: 600;
-}
-
-.jsfaq-button--link:hover,
-.jsfaq-button--link:focus-visible {
-  text-decoration: underline;
 }
 
 .jsfaq-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
-  padding: 0.5rem 0;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.jsfaq-tags__label {
+  font-weight: 600;
+  color: var(--jsfaq-text-color);
+}
+
+.jsfaq-tags__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .jsfaq-tag {
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  border: 1px solid var(--jsfaq-control-border, var(--jsfaq-muted-color));
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.4;
   background: var(--jsfaq-tag-bg);
   color: var(--jsfaq-accent-color);
   cursor: pointer;
+  overflow-wrap: anywhere;
   transition:
     background-color var(--jsfaq-transition),
     color var(--jsfaq-transition),
@@ -229,22 +181,72 @@
 }
 
 .jsfaq-tag:hover {
-  background: var(--jsfaq-accent-light);
   border-color: var(--jsfaq-accent-color);
 }
 
-.jsfaq-tag--active {
-  background: var(--jsfaq-tag-active-bg);
-  color: #ffffff;
-  font-weight: 600;
-  border-color: #1e3a8a;
+/* The pressed state is shown by the tick as well as by the colour (RGAA 3.1). */
+.jsfaq-tag__check {
+  display: none;
+  flex-shrink: 0;
 }
 
+.jsfaq-tag[aria-pressed="true"] .jsfaq-tag__check {
+  display: inline-block;
+}
+
+.jsfaq-tag--active,
 .jsfaq-tag--active:hover {
   background: var(--jsfaq-tag-active-bg);
   color: #ffffff;
-  border-color: #1e3a8a;
+  font-weight: 600;
+  border-color: var(--jsfaq-tag-active-bg);
 }
+
+.jsfaq__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.jsfaq__status {
+  margin: 0;
+  color: var(--jsfaq-text-secondary);
+}
+
+.jsfaq__toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.jsfaq-button {
+  border: 1px solid var(--jsfaq-control-border, var(--jsfaq-muted-color));
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-size: 0.95rem;
+  background: transparent;
+  color: var(--jsfaq-text-color);
+  cursor: pointer;
+  transition:
+    background-color var(--jsfaq-transition),
+    border-color var(--jsfaq-transition);
+}
+
+.jsfaq-button:hover {
+  border-color: var(--jsfaq-accent-color);
+}
+
+.jsfaq-tag:focus-visible,
+.jsfaq-button:focus-visible {
+  outline: 3px solid transparent;
+  box-shadow: var(--jsfaq-focus-ring);
+}
+
+/* ---- Sections and questions ---- */
 
 .jsfaq__content {
   display: flex;
@@ -256,18 +258,20 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  margin-bottom: 1rem;
 }
 
 .jsfaq__section__header {
-  margin-bottom: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
 }
 
 .jsfaq__section__title {
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.3;
   margin: 0 0 0.5rem 0;
   color: var(--jsfaq-text-color);
+  overflow-wrap: anywhere;
 }
 
 .jsfaq__section__description {
@@ -285,57 +289,68 @@
 .jsfaq-item {
   border: 2px solid var(--jsfaq-border-color);
   border-radius: var(--jsfaq-radius);
-  background: #ffffff;
-  overflow: hidden;
+  background: var(--jsfaq-surface-raised, #ffffff);
   transition:
     border-color var(--jsfaq-transition),
     box-shadow var(--jsfaq-transition);
 }
 
-.jsfaq-item:hover {
-  border-color: var(--jsfaq-accent-light);
+.jsfaq-item:focus {
+  outline: none; /* focus target of a #q- link only; the question button gets the visible focus */
 }
 
 .jsfaq-item--open {
   border-color: var(--jsfaq-accent-color);
-  box-shadow: 0 0 0 1px var(--jsfaq-accent-color);
 }
 
-.jsfaq-item__header {
-  padding: 0;
+.jsfaq-item__heading {
+  margin: 0;
+  font: inherit;
 }
 
-.jsfaq-item__question {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--jsfaq-text-color);
-  line-height: 1.4;
-  flex: 1;
-}
-
+.jsfaq-item__label,
 .jsfaq-item__toggle {
+  box-sizing: border-box;
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.jsfaq-item__toggle {
+  flex-wrap: nowrap;
   border: none;
+  border-radius: calc(var(--jsfaq-radius) - 2px);
+  margin: 0;
   background: transparent;
+  font: inherit;
   text-align: left;
   cursor: pointer;
-  padding: 1.25rem 1.5rem;
   color: var(--jsfaq-text-color);
   transition: background-color var(--jsfaq-transition);
 }
 
-.jsfaq-item__toggle:hover {
-  background-color: rgba(59, 130, 246, 0.04);
+.jsfaq-item__toggle:hover .jsfaq-item__question {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .jsfaq-item__toggle:focus-visible {
-  outline: none;
-  background-color: rgba(59, 130, 246, 0.08);
-  box-shadow: inset 0 0 0 2px var(--jsfaq-accent-color);
+  outline: 3px solid transparent;
+  box-shadow: var(--jsfaq-focus-ring);
+}
+
+.jsfaq-item__question {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--jsfaq-text-color);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .jsfaq-item__icon {
@@ -344,48 +359,54 @@
   transition: transform var(--jsfaq-transition);
 }
 
-.jsfaq-item--open .jsfaq-item__icon {
+.jsfaq-item__toggle[aria-expanded="true"] .jsfaq-item__icon {
   transform: rotate(180deg);
 }
 
 .jsfaq-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  flex-shrink: 0;
   padding: 0.25rem 0.75rem;
   background: var(--jsfaq-featured-bg);
   color: var(--jsfaq-featured-color);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   border-radius: 6px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
-  margin-left: 0.5rem;
 }
 
 .jsfaq-item__answer {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height var(--jsfaq-transition);
-}
-
-.jsfaq-item--open .jsfaq-item__answer {
-  max-height: 2000px;
+  padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
 .jsfaq-item__answer-content {
-  padding: 0 1.5rem 1.5rem 1.5rem;
   color: var(--jsfaq-text-secondary);
   line-height: 1.7;
   font-size: 1rem;
+  overflow-wrap: break-word;
 }
 
 .jsfaq-item__answer-content p {
   margin: 0 0 1em 0;
 }
 
-.jsfaq-item__answer-content p:last-child {
-  margin-bottom: 0;
+.jsfaq-item__answer-content :is(h3, h4, h5, h6) {
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  margin: 1.25em 0 0.5em;
+  color: var(--jsfaq-text-color);
+}
+
+.jsfaq-item__answer-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.jsfaq-item__answer-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .jsfaq-item__answer-content a {
@@ -401,62 +422,36 @@
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
-  margin: 0;
-  padding: 0 1.5rem 1rem 1.5rem;
+  margin: 1rem 0 0 0;
+  padding: 0;
   list-style: none;
 }
 
 .jsfaq-item__tag {
   background: var(--jsfaq-accent-light);
-  color: var(--jsfaq-accent-color);
+  color: var(--jsfaq-text-color);
   padding: 0.25rem 0.625rem;
   border-radius: 12px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.4;
-  display: inline-block;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow-wrap: anywhere;
 }
 
-.jsfaq-empty {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border: 1px dashed var(--jsfaq-border-color);
-  border-radius: var(--jsfaq-radius);
-  padding: 2.5rem 1rem;
-  font-size: 1rem;
-  color: var(--jsfaq-muted-color);
-}
-
-.jsfaq-empty[hidden] {
-  display: none;
-}
-
-[data-faq-section-hidden="true"],
-[data-faq-hidden="true"] {
-  display: none;
-}
-
-.jsfaq-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+/* Search matches: a fixed light pair, readable in light and dark schemes. */
+.jsfaq-highlight {
+  background: var(--jsfaq-highlight-bg, #fef08a);
+  color: var(--jsfaq-highlight-color, #0f172a);
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .jsfaq-ssr-wrapper,
-  .jsfaq-tag,
-  .jsfaq-button,
-  .jsfaq-item,
-  .jsfaq-item__copy-feedback,
-  .jsfaq-item__answer {
+  .jsfaq-ssr-wrapper *,
+  .jsfaq-ssr-wrapper *::before,
+  .jsfaq-ssr-wrapper *::after {
     transition: none !important;
+    animation: none !important;
   }
 }

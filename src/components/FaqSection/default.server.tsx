@@ -1,13 +1,9 @@
-import { jahiaComponent, RenderChildren, getNodeProps } from "@jahia/javascript-modules-library";
-import type { Resource } from "org.jahia.services.render";
-import type { JCRNodeWrapper } from "org.jahia.services.content";
+import { jahiaComponent, RenderChildren } from "@jahia/javascript-modules-library";
 import classes from "../../styles/faq.module.css";
 import RichText from "../../server/RichText";
+import { getString, idPrefixFor, placeSection } from "../../server/nodes";
 
-type ServerProps = Record<string, unknown>;
-type ServerContext = {
-  currentResource?: Resource;
-};
+type HeadingTag = "h2" | "h3" | "h4" | "h5" | "h6";
 
 jahiaComponent(
   {
@@ -15,50 +11,42 @@ jahiaComponent(
     componentType: "view",
     displayName: "FAQ Section",
   },
-  (_props: ServerProps, context: ServerContext) => {
-    const { currentResource } = context;
-
-    // Get current node
-    const node = (() => {
-      try {
-        if (!currentResource || typeof currentResource.getNode !== "function") return null;
-        return currentResource.getNode() as JCRNodeWrapper;
-      } catch {
-        return null;
-      }
-    })();
-
-    if (!node) {
-      return <div />;
+  (_props, { currentNode, currentResource }) => {
+    const uuid = String(currentNode.getIdentifier());
+    const title = getString(currentNode, "sectionTitle") || getString(currentNode, "jcr:title");
+    const placement = placeSection(currentNode);
+    try {
+      // The section level follows the FAQ title: re-render when it changes.
+      placement.dependencies.forEach((path) => currentResource.getDependencies().add(path));
+    } catch {
+      // the fragment then only follows its own node
     }
-
-    // Get section properties
-    const props = getNodeProps<Record<string, unknown>>(node, [
-      "jcr:uuid",
-      "sectionTitle",
-      "sectionDescription",
-      "jcr:title",
-    ]);
-
-    const uuid = String(props["jcr:uuid"] || "");
-    const sectionTitle = String(props["sectionTitle"] || props["jcr:title"] || "");
-    const sectionDescription = props["sectionDescription"]
-      ? String(props["sectionDescription"])
-      : undefined;
+    const Heading = `h${placement.level}` as HeadingTag;
+    const headingId = `section-${uuid}`;
 
     return (
-      <section className={classes.jsfaq__section} data-faq-section-id={uuid}>
-        <header className={classes.jsfaq__section__header}>
-          <h2 className={classes.jsfaq__section__title}>{sectionTitle}</h2>
+      <section className={classes.jsfaq__section} data-faq-section={uuid}>
+        {title ? (
+          <header className={classes.jsfaq__section__header}>
+            <Heading id={headingId} className={classes.jsfaq__section__title}>
+              {title}
+            </Heading>
+            <RichText
+              className={classes.jsfaq__section__description}
+              html={getString(currentNode, "sectionDescription")}
+              headingLevel={placement.level + 1}
+              idPrefix={idPrefixFor(currentNode, "s")}
+            />
+          </header>
+        ) : (
           <RichText
             className={classes.jsfaq__section__description}
-            html={sectionDescription}
-            headingLevel={3}
-            idPrefix={`jsfaq-s-${uuid.slice(0, 8)}-`}
+            html={getString(currentNode, "sectionDescription")}
+            headingLevel={placement.level}
+            idPrefix={idPrefixFor(currentNode, "s")}
           />
-        </header>
+        )}
         <div className={classes.jsfaq__section__items}>
-          {/* Render all FAQ items within this section */}
           <RenderChildren />
         </div>
       </section>

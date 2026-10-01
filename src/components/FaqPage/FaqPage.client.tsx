@@ -1,504 +1,326 @@
 import { useEffect } from "react";
-import type { FaqInitialProps, FaqItem, FaqStrings } from "../../types";
-
-const DATA_ATTRIBUTE = "data-faq-props";
+import { useTranslation } from "react-i18next";
 
 const HASH_PREFIX = "q-";
+const STATUS_DELAY = 600;
+
+type Messages = {
+  count: (count: number) => string;
+  none: string;
+};
 
 type ItemEntry = {
   id: string;
   element: HTMLElement;
-  toggle?: HTMLButtonElement | null;
-  answer?: HTMLElement | null;
-  sectionId: string | null;
-  data: FaqItem;
-  defaultOrder: number;
+  toggle: HTMLButtonElement;
+  question: HTMLElement;
+  answer: HTMLElement;
+  section: HTMLElement | null;
+  /** Question and answer text, folded for matching. */
+  text: string;
+  tags: string[];
 };
 
-type SectionEntry = {
-  id: string;
-  element: HTMLElement;
+/**
+ * Folds a text for matching, one UTF-16 unit for one, so that match positions stay valid in the
+ * original text: lower case, without diacritics ("Été" matches "ete").
+ */
+const fold = (value: string): string => {
+  let out = "";
+  for (const c of value) {
+    const base = c.normalize("NFD")[0] ?? c;
+    const lower = base.toLowerCase();
+    const unit = lower.length === 1 ? lower : base;
+    out += c.length === unit.length ? unit : c;
+  }
+  return out;
 };
 
-type FaqState = {
-  searchTerm: string;
-  activeTags: Set<string>;
-  featuredFirst: boolean;
-  openItems: Set<string>;
-};
-
-const parseInitialProps = (): FaqInitialProps | null => {
-  const script = document.querySelector<HTMLScriptElement>(`script[${DATA_ATTRIBUTE}]`);
-  if (!script) return null;
+const parseTags = (value: string | null): string[] => {
+  if (!value) return [];
   try {
-    const json = script.textContent || script.innerText || "";
-    if (!json) return null;
-    return JSON.parse(json) as FaqInitialProps;
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
+      : [];
   } catch {
-    return null;
+    return [];
   }
 };
 
-const normalizeText = (value: string): string => value.toLowerCase();
+const prefersReducedMotion = () =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/**
+ * Drives one FAQ rendered by the server view: disclosure of the answers, search, tag filter,
+ * "expand all" and "collapse all", and the link to a question (#q-<id>).
+ *
+ * Everything it needs is read from the markup, so no content is serialised for the browser. The
+ * server renders every answer open and the controls hidden, so the FAQ stays readable without
+ * JavaScript; this controller reveals the controls and closes the answers.
+ */
 class FaqController {
   private readonly root: HTMLElement;
-  private readonly props: FaqInitialProps;
-  private readonly strings: FaqStrings;
-  private readonly items: Map<string, ItemEntry> = new Map();
-  private readonly sections: SectionEntry[] = [];
-  private state: FaqState;
-  private searchInput?: HTMLInputElement | null;
-  private featuredToggle?: HTMLInputElement | null;
-  private clearButton?: HTMLButtonElement | null;
-  private expandAllButton?: HTMLButtonElement | null;
-  private collapseAllButton?: HTMLButtonElement | null;
-  private emptyState?: HTMLElement | null;
-  private destroyers: Array<() => void> = [];
-  private openClassName: string;
-  private tagActiveClassName: string;
+  private readonly messages: Messages;
+  private readonly items = new Map<string, ItemEntry>();
+  private readonly sections = new Set<HTMLElement>();
+  private readonly open = new Set<string>();
+  private readonly activeTags = new Set<string>();
+  private readonly destroyers: Array<() => void> = [];
+  private readonly openClass: string;
+  private readonly tagActiveClass: string;
+  private readonly highlightClass: string;
+  private search: HTMLInputElement | null = null;
+  private status: HTMLElement | null = null;
+  private term = "";
+  private statusTimer: number | undefined;
 
-  constructor(root: HTMLElement, props: FaqInitialProps) {
+  constructor(root: HTMLElement, messages: Messages) {
     this.root = root;
-    this.props = props;
-    this.strings = props.strings;
-    this.openClassName = root.getAttribute("data-faq-open-class") || "jsfaq-item--open";
-    this.tagActiveClassName = root.getAttribute("data-faq-tag-active-class") || "jsfaq-tag--active";
-    this.state = {
-      searchTerm: "",
-      activeTags: new Set<string>(),
-      featuredFirst: props.featuredFirstDefault,
-      openItems: new Set<string>(),
-    };
+    this.messages = messages;
+    this.openClass = root.dataset.faqOpenClass || "jsfaq-item--open";
+    this.tagActiveClass = root.dataset.faqTagActiveClass || "jsfaq-tag--active";
+    this.highlightClass = root.dataset.faqHighlightClass || "jsfaq-highlight";
   }
 
   init() {
-    this.collectElements();
-    this.collectItems();
-    this.attachEventListeners();
-    this.state.openItems = new Set(); // Start with all items closed
-    this.applyFeaturedFirstState();
-    this.applyFilters();
-    this.applyOpenState();
-    this.syncFromHash();
-  }
-
-  dispose() {
-    this.destroyers.forEach((destroy) => {
-      try {
-        destroy();
-      } catch {
-        // ignore teardown errors
-      }
-    });
-  }
-
-  private collectElements() {
-    this.searchInput = this.root.querySelector<HTMLInputElement>("[data-faq-search]");
-    this.featuredToggle = this.root.querySelector<HTMLInputElement>("[data-faq-featured]");
-    this.clearButton = this.root.querySelector<HTMLButtonElement>("[data-faq-clear]");
-    this.expandAllButton = this.root.querySelector<HTMLButtonElement>("[data-faq-expand-all]");
-    this.collapseAllButton = this.root.querySelector<HTMLButtonElement>("[data-faq-collapse-all]");
-    this.emptyState = this.root.querySelector<HTMLElement>("[data-faq-empty]");
-
-    this.root.querySelectorAll<HTMLElement>("[data-faq-section-id]").forEach((sectionEl) => {
-      const id = sectionEl.getAttribute("data-faq-section-id");
-      if (id) {
-        this.sections.push({ id, element: sectionEl });
-      }
-    });
-  }
-
-  private collectItems() {
-    const flattened = new Map<string, FaqItem>();
-
-    const registerItems = (items: FaqItem[]) => {
-      items.forEach((item) => {
-        flattened.set(item.uuid, item);
-      });
-    };
-
-    registerItems(this.props.page.items);
-    this.props.page.sections.forEach((section) => registerItems(section.items));
-
-    let index = 0;
     this.root.querySelectorAll<HTMLElement>("[data-faq-item]").forEach((element) => {
-      const id = element.getAttribute("data-faq-id");
-      if (!id) return;
-
-      const data = flattened.get(id);
-      if (!data) return;
-
+      const id = element.dataset.faqId;
       const toggle = element.querySelector<HTMLButtonElement>("[data-faq-toggle]");
       const answer = element.querySelector<HTMLElement>("[data-faq-answer]");
-      const section = element.closest<HTMLElement>("[data-faq-section-id]");
-
+      // An item of another FAQ nested in this one belongs to that FAQ's controller.
+      if (!id || !toggle || !answer || element.closest("[data-faq-root]") !== this.root) return;
+      const question = toggle.querySelector<HTMLElement>("[data-faq-question]") ?? toggle;
+      const section = element.closest<HTMLElement>("[data-faq-section]");
+      if (section) this.sections.add(section);
       this.items.set(id, {
         id,
         element,
         toggle,
+        question,
         answer,
-        sectionId: section?.getAttribute("data-faq-section-id") ?? null,
-        data,
-        defaultOrder: index,
+        section,
+        text: fold(`${question.textContent ?? ""} ${answer.textContent ?? ""}`),
+        tags: parseTags(element.dataset.faqTags ?? null),
       });
-      index += 1;
     });
+
+    this.search = this.root.querySelector<HTMLInputElement>("[data-faq-search]");
+    this.status = this.root.querySelector<HTMLElement>("[data-faq-status]");
+    this.listen();
+
+    this.root.querySelectorAll<HTMLElement>("[data-faq-controls]").forEach((controls) => {
+      controls.hidden = false;
+    });
+    this.applyOpenState();
+    this.syncFromHash(false);
   }
 
-  private attachEventListeners() {
-    const onSearchInput = (event: Event) => {
-      const value = (event.target as HTMLInputElement).value;
-      this.state.searchTerm = value;
-      this.applyFilters();
-    };
-    if (this.searchInput) {
-      this.searchInput.addEventListener("input", onSearchInput);
-      this.destroyers.push(() => this.searchInput?.removeEventListener("input", onSearchInput));
+  dispose() {
+    window.clearTimeout(this.statusTimer);
+    this.destroyers.forEach((destroy) => destroy());
+  }
+
+  private on<K extends keyof HTMLElementEventMap>(
+    target: HTMLElement,
+    type: K,
+    handler: (event: HTMLElementEventMap[K]) => void,
+  ) {
+    target.addEventListener(type, handler);
+    this.destroyers.push(() => target.removeEventListener(type, handler));
+  }
+
+  private listen() {
+    if (this.search) {
+      const search = this.search;
+      this.on(search, "input", () => {
+        this.term = search.value.trim();
+        this.applyFilters(true);
+      });
     }
 
-    const onFeaturedChange = (event: Event) => {
-      const checked = (event.target as HTMLInputElement).checked;
-      this.state.featuredFirst = checked;
-      this.applyFeaturedFirstState();
-      this.applyFilters();
-    };
-    if (this.featuredToggle) {
-      this.featuredToggle.addEventListener("change", onFeaturedChange);
-      this.destroyers.push(() =>
-        this.featuredToggle?.removeEventListener("change", onFeaturedChange),
-      );
-      this.featuredToggle.checked = this.state.featuredFirst;
-    }
-
-    const onClear = () => {
-      this.state.searchTerm = "";
-      if (this.searchInput) {
-        this.searchInput.value = "";
-      }
-      this.state.activeTags.clear();
-      this.state.featuredFirst = this.props.featuredFirstDefault;
-      if (this.featuredToggle) {
-        this.featuredToggle.checked = this.state.featuredFirst;
-      }
-      this.applyFeaturedFirstState();
-      this.updateTagButtons();
-      this.applyFilters();
-    };
-    if (this.clearButton) {
-      this.clearButton.addEventListener("click", onClear);
-      this.destroyers.push(() => this.clearButton?.removeEventListener("click", onClear));
-    }
-
-    const onExpandAll = () => {
-      this.items.forEach((entry) => this.state.openItems.add(entry.id));
-      this.applyOpenState();
-      this.updateUrlHash(null);
-    };
-    if (this.expandAllButton) {
-      this.expandAllButton.addEventListener("click", onExpandAll);
-      this.destroyers.push(() => this.expandAllButton?.removeEventListener("click", onExpandAll));
-    }
-
-    const onCollapseAll = () => {
-      this.items.forEach((entry) => this.state.openItems.delete(entry.id));
-      this.applyOpenState();
-      this.updateUrlHash(null);
-    };
-    if (this.collapseAllButton) {
-      this.collapseAllButton.addEventListener("click", onCollapseAll);
-      this.destroyers.push(() =>
-        this.collapseAllButton?.removeEventListener("click", onCollapseAll),
-      );
-    }
-
-    const onRootClick = (event: Event) => {
-      const target = event.target as HTMLElement;
+    this.on(this.root, "click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
 
       const tagButton = target.closest<HTMLButtonElement>("[data-faq-tag]");
-      if (tagButton) {
-        const tag = tagButton.getAttribute("data-faq-tag");
-        if (tag) {
-          if (this.state.activeTags.has(tag)) {
-            this.state.activeTags.delete(tag);
-          } else {
-            this.state.activeTags.add(tag);
-          }
-          this.updateTagButtons();
-          this.applyFilters();
-        }
+      if (tagButton && this.root.contains(tagButton)) {
+        const tag = tagButton.dataset.faqTag ?? "";
+        if (this.activeTags.has(tag)) this.activeTags.delete(tag);
+        else this.activeTags.add(tag);
+        const pressed = this.activeTags.has(tag);
+        tagButton.setAttribute("aria-pressed", pressed ? "true" : "false");
+        tagButton.classList.toggle(this.tagActiveClass, pressed);
+        this.applyFilters(false);
         return;
       }
 
-      const toggleButton = target.closest<HTMLButtonElement>("[data-faq-toggle]");
-      if (toggleButton) {
-        const itemEl = toggleButton.closest<HTMLElement>("[data-faq-item]");
-        const id = itemEl?.getAttribute("data-faq-id");
-        if (id) {
-          if (this.state.openItems.has(id)) {
-            this.state.openItems.delete(id);
-          } else {
-            this.state.openItems.add(id);
-          }
-          this.applyOpenState();
-          if (this.state.openItems.has(id)) {
-            this.updateUrlHash(id);
-          }
-        }
+      if (target.closest("[data-faq-expand-all]")) {
+        this.items.forEach((entry) => {
+          if (!entry.element.hidden) this.open.add(entry.id);
+        });
+        this.applyOpenState();
+        this.clearOwnHash();
         return;
       }
-    };
 
-    this.root.addEventListener("click", onRootClick);
-    this.destroyers.push(() => this.root.removeEventListener("click", onRootClick));
+      if (target.closest("[data-faq-collapse-all]")) {
+        this.open.clear();
+        this.applyOpenState();
+        this.clearOwnHash();
+        return;
+      }
 
-    const onHashChange = () => {
-      this.syncFromHash();
-    };
+      const toggle = target.closest<HTMLButtonElement>("[data-faq-toggle]");
+      const id = toggle?.closest<HTMLElement>("[data-faq-item]")?.dataset.faqId;
+      if (!id || !this.items.has(id)) return;
+      if (this.open.has(id)) {
+        this.open.delete(id);
+      } else {
+        this.open.add(id);
+        this.setHash(id);
+      }
+      this.applyOpenState();
+    });
+
+    const onHashChange = () => this.syncFromHash(true);
     window.addEventListener("hashchange", onHashChange);
     this.destroyers.push(() => window.removeEventListener("hashchange", onHashChange));
   }
 
-  private highlightText(element: HTMLElement, searchTerm: string) {
-    // Remove existing highlights
-    element.querySelectorAll("mark[data-faq-highlight]").forEach((mark) => {
-      const parent = mark.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
-        parent.normalize();
-      }
-    });
-
-    if (!searchTerm || searchTerm.length < 2) return;
-
-    const normalizedSearch = normalizeText(searchTerm);
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
-    const nodesToReplace: { node: Text; matches: Array<{ start: number; end: number }> }[] = [];
-
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      if (!node.textContent) continue;
-      const normalized = normalizeText(node.textContent);
-      const matches: Array<{ start: number; end: number }> = [];
-      let index = 0;
-
-      while ((index = normalized.indexOf(normalizedSearch, index)) !== -1) {
-        matches.push({ start: index, end: index + normalizedSearch.length });
-        index += normalizedSearch.length;
-      }
-
-      if (matches.length > 0) {
-        nodesToReplace.push({ node, matches });
-      }
-    }
-
-    nodesToReplace.forEach(({ node, matches }) => {
-      const text = node.textContent || "";
-      const parent = node.parentNode;
-      if (!parent) return;
-
-      const fragment = document.createDocumentFragment();
-      let lastIndex = 0;
-
-      matches.forEach(({ start, end }) => {
-        if (start > lastIndex) {
-          fragment.appendChild(document.createTextNode(text.substring(lastIndex, start)));
-        }
-        const mark = document.createElement("mark");
-        mark.setAttribute("data-faq-highlight", "true");
-        mark.style.backgroundColor = "#fef08a";
-        mark.style.padding = "0 2px";
-        mark.style.borderRadius = "2px";
-        mark.textContent = text.substring(start, end);
-        fragment.appendChild(mark);
-        lastIndex = end;
-      });
-
-      if (lastIndex < text.length) {
-        fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
-      }
-
-      parent.replaceChild(fragment, node);
-    });
-  }
-
-  private applyFilters() {
-    const query = normalizeText(this.state.searchTerm.trim());
-    const hasQuery = query.length > 0;
-    const activeTags = Array.from(this.state.activeTags.values());
-    const sectionMatches = new Map<string, number>();
-    let visibleCount = 0;
+  private applyFilters(fromTyping: boolean) {
+    const query = fold(this.term);
+    const tags = [...this.activeTags];
+    const visibleSections = new Set<HTMLElement>();
+    let visible = 0;
 
     this.items.forEach((entry) => {
-      const haystack = normalizeText(`${entry.data.question} ${entry.data.answerText ?? ""}`);
-      let matches = true;
-      if (hasQuery) {
-        matches = haystack.includes(query);
-      }
-
-      if (matches && activeTags.length) {
-        const itemTags = entry.data.tags ?? [];
-        matches = activeTags.every((tag) => itemTags.includes(tag));
-      }
-
-      entry.element.toggleAttribute("data-faq-hidden", !matches);
-      entry.element.toggleAttribute("hidden", !matches);
-
-      // Highlight search term and open item if it matches
-      if (hasQuery && entry.answer) {
-        if (matches) {
-          this.highlightText(entry.answer, this.state.searchTerm.trim());
-          // Open items that match the search
-          this.state.openItems.add(entry.id);
-        } else {
-          this.highlightText(entry.answer, ""); // Clear highlights
-        }
-      } else if (!hasQuery && entry.answer) {
-        this.highlightText(entry.answer, ""); // Clear highlights when no search
-      }
-
-      if (matches) {
-        visibleCount += 1;
-        if (entry.sectionId) {
-          sectionMatches.set(entry.sectionId, (sectionMatches.get(entry.sectionId) ?? 0) + 1);
-        }
-      }
+      const matches =
+        (!query || entry.text.includes(query)) && tags.every((tag) => entry.tags.includes(tag));
+      entry.element.hidden = !matches;
+      this.highlight(entry, matches && query.length >= 2 ? query : "");
+      if (!matches) return;
+      visible += 1;
+      if (entry.section) visibleSections.add(entry.section);
+      // Show the answer that matched the search, with the match highlighted.
+      if (query) this.open.add(entry.id);
     });
 
     this.sections.forEach((section) => {
-      const count = sectionMatches.get(section.id) ?? 0;
-      const hideSection = count === 0;
-      section.element.toggleAttribute("data-faq-section-hidden", hideSection);
-      section.element.toggleAttribute("hidden", hideSection);
+      section.hidden = !visibleSections.has(section);
     });
+    this.applyOpenState();
 
-    if (this.emptyState) {
-      if (visibleCount === 0) {
-        this.emptyState.removeAttribute("hidden");
-      } else {
-        this.emptyState.setAttribute("hidden", "true");
-      }
+    // Typing announces the count once the visitor pauses, not on every keystroke (RGAA 7.5).
+    window.clearTimeout(this.statusTimer);
+    const filtered = Boolean(query) || tags.length > 0;
+    const message = !filtered
+      ? ""
+      : visible === 0
+        ? this.messages.none
+        : this.messages.count(visible);
+    if (fromTyping) {
+      this.statusTimer = window.setTimeout(() => this.setStatus(message), STATUS_DELAY);
+    } else {
+      this.setStatus(message);
     }
+  }
 
-    const filtersActive =
-      hasQuery ||
-      activeTags.length > 0 ||
-      this.state.featuredFirst !== this.props.featuredFirstDefault;
-    if (this.clearButton) {
-      this.clearButton.disabled = !filtersActive;
-    }
-
-    this.reorderItems();
-    this.applyOpenState(); // Apply open/closed state after filtering
+  private setStatus(message: string) {
+    if (this.status && this.status.textContent !== message) this.status.textContent = message;
   }
 
   private applyOpenState() {
     this.items.forEach((entry) => {
-      const isOpen = this.state.openItems.has(entry.id);
-      entry.element.classList.toggle(this.openClassName, isOpen);
-      if (entry.toggle) {
-        entry.toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      const isOpen = this.open.has(entry.id);
+      entry.element.classList.toggle(this.openClass, isOpen);
+      entry.toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      entry.answer.hidden = !isOpen;
+    });
+  }
+
+  /** Wraps each match of `query` (folded) in a <mark>, in the question and the answer. */
+  private highlight(entry: ItemEntry, query: string) {
+    for (const container of [entry.question, entry.answer]) {
+      container.querySelectorAll("mark[data-faq-highlight]").forEach((mark) => {
+        mark.replaceWith(document.createTextNode(mark.textContent ?? ""));
+      });
+      container.normalize();
+      if (!query) continue;
+
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node as Text);
+
+      for (const node of nodes) {
+        const text = node.data;
+        const folded = fold(text);
+        let from = 0;
+        let at = folded.indexOf(query);
+        if (at === -1) continue;
+        const fragment = document.createDocumentFragment();
+        while (at !== -1) {
+          if (at > from) fragment.append(text.slice(from, at));
+          const mark = document.createElement("mark");
+          mark.dataset.faqHighlight = "true";
+          mark.className = this.highlightClass;
+          mark.textContent = text.slice(at, at + query.length);
+          fragment.append(mark);
+          from = at + query.length;
+          at = folded.indexOf(query, from);
+        }
+        if (from < text.length) fragment.append(text.slice(from));
+        node.replaceWith(fragment);
       }
-    });
-  }
-
-  private updateTagButtons() {
-    const activeTags = this.state.activeTags;
-    this.root.querySelectorAll<HTMLButtonElement>("[data-faq-tag]").forEach((button) => {
-      const tag = button.getAttribute("data-faq-tag");
-      const isActive = tag ? activeTags.has(tag) : false;
-      button.classList.toggle(this.tagActiveClassName, isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-  }
-
-  private applyFeaturedFirstState() {
-    if (this.featuredToggle) {
-      this.featuredToggle.checked = this.state.featuredFirst;
     }
-    this.reorderItems();
   }
 
-  private reorderItems() {
-    const featuredFirst = this.state.featuredFirst;
-    this.items.forEach((entry) => {
-      if (featuredFirst) {
-        const priority = entry.data.isFeatured ? "0" : "1";
-        entry.element.style.order = `${priority}-${entry.defaultOrder.toString().padStart(4, "0")}`;
-      } else {
-        entry.element.style.order = "";
-      }
-    });
-  }
-
-  private syncFromHash() {
-    const hash = window.location.hash.replace("#", "");
+  private syncFromHash(focus: boolean) {
+    const hash = decodeURIComponent(window.location.hash.slice(1));
     if (!hash.startsWith(HASH_PREFIX)) return;
-    const id = hash.slice(HASH_PREFIX.length);
-    if (!this.items.has(id)) return;
-
-    this.state.openItems.add(id);
+    const entry = this.items.get(hash.slice(HASH_PREFIX.length));
+    if (!entry) return;
+    entry.element.hidden = false;
+    this.open.add(entry.id);
     this.applyOpenState();
-
-    const entry = this.items.get(id);
-    if (entry?.element) {
-      entry.element.scrollIntoView({ block: "start", behavior: "smooth" });
-      entry.element.focus?.();
-    }
+    entry.element.scrollIntoView({
+      block: "start",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+    if (focus || document.activeElement === document.body)
+      entry.toggle.focus({ preventScroll: true });
   }
 
-  private updateUrlHash(id: string | null) {
+  private setHash(id: string) {
     const url = new URL(window.location.href);
-    if (id) {
-      url.hash = `${HASH_PREFIX}${id}`;
-    } else {
-      url.hash = "";
-    }
-    window.history.replaceState({}, "", url.toString());
+    url.hash = `${HASH_PREFIX}${id}`;
+    window.history.replaceState(window.history.state, "", url.toString());
+  }
+
+  private clearOwnHash() {
+    const hash = window.location.hash.slice(1);
+    if (!hash.startsWith(HASH_PREFIX) || !this.items.has(hash.slice(HASH_PREFIX.length))) return;
+    const url = new URL(window.location.href);
+    url.hash = "";
+    window.history.replaceState(window.history.state, "", url.toString());
   }
 }
 
-const FaqPageClient = () => {
+/** Island of one FAQ: attaches the controller to the FAQ markup whose id it receives. */
+const FaqPageClient = ({ rootId }: { rootId: string }) => {
+  const { t } = useTranslation("jsfaq");
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const props = parseInitialProps();
-    if (!props) return;
-
-    const root = document.querySelector<HTMLElement>("[data-faq-root]");
+    const root = document.getElementById(rootId);
     if (!root) return;
-
-    let controller: FaqController | null = null;
-    let disposed = false;
-
-    const initialize = () => {
-      if (disposed || controller) return;
-      controller = new FaqController(root, props);
-      controller.init();
-    };
-
-    if ("IntersectionObserver" in window) {
-      const observer = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          observer.disconnect();
-          initialize();
-        }
-      });
-      observer.observe(root);
-      return () => {
-        disposed = true;
-        observer.disconnect();
-        controller?.dispose();
-      };
-    }
-
-    initialize();
-
-    return () => {
-      disposed = true;
-      controller?.dispose();
-    };
-  }, []);
+    const controller = new FaqController(root, {
+      count: (count) => t("resultCount", { count }),
+      none: t("noResults"),
+    });
+    controller.init();
+    return () => controller.dispose();
+  }, [rootId, t]);
 
   return null;
 };

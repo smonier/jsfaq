@@ -1,12 +1,9 @@
-import { jahiaComponent, getNodeProps } from "@jahia/javascript-modules-library";
-import type { Resource } from "org.jahia.services.render";
-import type { JCRNodeWrapper } from "org.jahia.services.content";
+import { jahiaComponent } from "@jahia/javascript-modules-library";
+import { useTranslation } from "react-i18next";
 import FaqItem from "./FaqItem";
-
-type ServerProps = Record<string, unknown>;
-type ServerContext = {
-  currentResource?: Resource;
-};
+import classes from "../../styles/faq.module.css";
+import RichText from "../../server/RichText";
+import { getString, getTags, idPrefixFor, placeItem } from "../../server/nodes";
 
 jahiaComponent(
   {
@@ -14,86 +11,46 @@ jahiaComponent(
     componentType: "view",
     displayName: "FAQ Item",
   },
-  (_props: ServerProps, context: ServerContext) => {
-    const { currentResource } = context;
-
-    // Get current node
-    const node = (() => {
-      try {
-        if (!currentResource || typeof currentResource.getNode !== "function") return null;
-        return currentResource.getNode() as JCRNodeWrapper;
-      } catch {
-        return null;
-      }
-    })();
-
-    if (!node) {
-      return <div />;
+  (_props, { currentNode, currentResource, renderContext }) => {
+    const { t } = useTranslation();
+    const uuid = String(currentNode.getIdentifier());
+    const question = getString(currentNode, "question") || getString(currentNode, "jcr:title");
+    const placement = placeItem(currentNode);
+    try {
+      // The question level follows the headings above it: re-render when they change.
+      placement.dependencies.forEach((path) => currentResource.getDependencies().add(path));
+    } catch {
+      // the fragment then only follows its own node
     }
-
-    // Get item properties
-    const props = getNodeProps<Record<string, unknown>>(node, [
-      "jcr:uuid",
-      "question",
-      "answer",
-      "isFeatured",
-      "jcr:title",
-    ]);
-
-    const uuid = String(props["jcr:uuid"] || "");
-    const question = String(props["question"] || props["jcr:title"] || "");
-    const answerHtml = String(props["answer"] || "");
-
-    // Get tags from Jahia's jmix:tagged
-    const tags = (() => {
+    const isFeatured = (() => {
       try {
-        if (!node.hasProperty || !node.hasProperty("j:tagList")) return [];
-
-        // Try to get as property which might return an array
-        const property = node.getProperty("j:tagList");
-        if (!property) return [];
-
-        // Check if it's a multi-valued property
-        if (property.isMultiple && property.isMultiple()) {
-          const values = property.getValues();
-          const tagArray: string[] = [];
-          for (let i = 0; i < values.length; i++) {
-            const val = values[i].getString();
-            if (val) tagArray.push(val);
-          }
-          return tagArray;
-        }
-
-        // Single value - split by comma if needed
-        const tagList = property.getString();
-        if (!tagList) return [];
-        return String(tagList)
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean);
+        return (
+          currentNode.hasProperty("isFeatured") &&
+          currentNode.getProperty("isFeatured").getBoolean()
+        );
       } catch {
-        return [];
+        return false;
       }
     })();
 
-    const isFeatured = Boolean(props["isFeatured"]);
-
-    // Simple server-side rendering - client handles interactivity
-    const item = {
-      uuid,
-      question,
-      answerHtml,
-      answerText: "",
-      tags,
-      isFeatured,
-    };
-
-    // Minimal strings for server render (client will handle real ones)
-    const strings = {
-      featured: "Featured",
-      tagsLabel: "Tags",
-    };
-
-    return <FaqItem item={item} isOpen={false} strings={strings} />;
+    return (
+      <FaqItem
+        uuid={uuid}
+        question={question}
+        answer={
+          <RichText
+            className={classes["jsfaq-item__answer-content"]}
+            html={getString(currentNode, "answer")}
+            headingLevel={placement.level + 1}
+            idPrefix={idPrefixFor(currentNode, "a")}
+          />
+        }
+        tags={getTags(currentNode)}
+        isFeatured={isFeatured}
+        level={placement.level}
+        interactive={Boolean(placement.page) && !renderContext.isEditMode()}
+        strings={{ featured: t("featured"), itemTags: t("itemTags") }}
+      />
+    );
   },
 );

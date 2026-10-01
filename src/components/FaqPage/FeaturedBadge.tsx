@@ -5,9 +5,7 @@ type FeaturedBadgeProps = {
 };
 
 const FeaturedBadge = ({ label }: FeaturedBadgeProps) => (
-  <span className={classes["jsfaq-badge"]} aria-label={label}>
-    {label}
-  </span>
+  <span className={classes["jsfaq-badge"]}>{label}</span>
 );
 
 export default FeaturedBadge;

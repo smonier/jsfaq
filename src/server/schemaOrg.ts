@@ -1,34 +1,21 @@
 import { htmlToPlainText } from "./sanitize";
-import type { FaqItem, FaqPage, SchemaOrgFaq } from "../types";
+import type { SchemaOrgFaq } from "../types";
 
-const uniqueByUuid = (items: FaqItem[]): FaqItem[] => {
+export type FaqEntry = { uuid: string; question: string; answerHtml: string };
+
+/** schema.org FAQPage of the questions shown, each once, with a plain-text answer. */
+export const buildFaqJsonLdObject = (entries: FaqEntry[]): SchemaOrgFaq => {
   const seen = new Set<string>();
-  return items.filter((item) => {
-    if (!item.uuid) return false;
-    if (seen.has(item.uuid)) return false;
-    seen.add(item.uuid);
-    return Boolean(item.question && item.answerHtml);
-  });
-};
-
-export const buildFaqJsonLdObject = (page: FaqPage): SchemaOrgFaq => {
-  const flattened = uniqueByUuid([
-    ...(page.items ?? []),
-    ...page.sections.flatMap((section) => section.items ?? []),
-  ]);
-
-  return {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: flattened.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: htmlToPlainText(item.answerHtml),
-      },
-    })),
-  };
+  const mainEntity: SchemaOrgFaq["mainEntity"] = [];
+  for (const entry of entries) {
+    if (!entry.uuid || seen.has(entry.uuid)) continue;
+    seen.add(entry.uuid);
+    const text = htmlToPlainText(entry.answerHtml);
+    const name = entry.question.trim();
+    if (!name || !text) continue;
+    mainEntity.push({ "@type": "Question", name, "acceptedAnswer": { "@type": "Answer", text } });
+  }
+  return { "@context": "https://schema.org", "@type": "FAQPage", mainEntity };
 };
 
 /**
@@ -43,7 +30,3 @@ export const jsonForScript = (value: unknown): string =>
     .replace(/&/g, "\\u0026")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
-
-export const buildFaqJsonLd = (page: FaqPage): string => jsonForScript(buildFaqJsonLdObject(page));
-
-export default buildFaqJsonLd;

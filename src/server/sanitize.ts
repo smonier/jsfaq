@@ -153,7 +153,8 @@ const NAMED: Record<string, string> = {
 export const decodeEntities = (value: string): string =>
   value.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,31});?/gi, (match, ref: string) => {
     if (ref[0] === "#") {
-      const code = ref[1] === "x" || ref[1] === "X" ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+      const code =
+        ref[1] === "x" || ref[1] === "X" ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
       return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "�";
     }
     return NAMED[ref] ?? NAMED[ref.toLowerCase()] ?? match;
@@ -256,7 +257,8 @@ const filterAttributes = (tag: string, attrs: Array<[string, string]>, prefix: s
       case "src":
       case "cite": {
         if (!isSafeUrl(value)) break; // an empty href would still link to this page
-        const anchor = name === "href" && value.startsWith("#") ? prefixed(value.slice(1)) : undefined;
+        const anchor =
+          name === "href" && value.startsWith("#") ? prefixed(value.slice(1)) : undefined;
         write(name, anchor ? `#${anchor}` : value);
         break;
       }
@@ -309,12 +311,15 @@ const renumberHeadings = (html: string, base: number): string => {
   const rank = new Map(used.map((level, index) => [level, clamp(base + index)]));
   let previous = clamp(base) - 1;
   let open = clamp(base);
-  return html.replace(/<(\/?)h([1-6])([\s>])/g, (_match, closing: string, level: string, next: string) => {
-    if (closing) return `</h${open}${next}`;
-    open = Math.min(rank.get(Number(level)) ?? clamp(base), previous + 1);
-    previous = open;
-    return `<h${open}${next}`;
-  });
+  return html.replace(
+    /<(\/?)h([1-6])([\s>])/g,
+    (_match, closing: string, level: string, next: string) => {
+      if (closing) return `</h${open}${next}`;
+      open = Math.min(rank.get(Number(level)) ?? clamp(base), previous + 1);
+      previous = open;
+      return `<h${open}${next}`;
+    },
+  );
 };
 
 export interface SanitizeOptions {
@@ -400,7 +405,8 @@ export const sanitizeRichText = (
   return renumberHeadings(out, headingLevel);
 };
 
-const BLOCK_BOUNDARY = /<\/?(?:p|div|br|li|h[1-6]|tr|td|th|dt|dd|blockquote|figcaption|pre|hr)\b[^>]*>/gi;
+const BLOCK_BOUNDARY =
+  /<\/?(?:p|div|br|li|h[1-6]|tr|td|th|dt|dd|blockquote|figcaption|pre|hr)\b[^>]*>/gi;
 
 /** Plain text of an editor's rich text, for structured data and search. */
 export const htmlToPlainText = (input: unknown): string => {

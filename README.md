@@ -163,11 +163,12 @@ Your FAQ is now live with:
 
 ### FAQ Page Properties
 
-| Property          | Type      | Required | Description                              |
-| ----------------- | --------- | -------- | ---------------------------------------- |
-| `jcr:title`       | String    | ✅       | Main page heading                        |
-| `intro`           | Rich Text | ❌       | Introduction displayed below title       |
-| `enableTagFilter` | Boolean   | ❌       | Show tag filter buttons (default: false) |
+| Property          | Type      | Required | Description                                                                                      |
+| ----------------- | --------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `jcr:title`       | String    | ❌       | FAQ heading (no heading when empty)                                                              |
+| `intro`           | Rich Text | ❌       | Introduction displayed below title                                                               |
+| `enableTagFilter` | Boolean   | ❌       | Show tag filter buttons (default: false)                                                         |
+| `headingLevel`    | Choice    | ❌       | Level of the FAQ title: h2, h3 or h4 (default: h2). Sections and questions take the next levels. |
 
 ### FAQ Section Properties
 
@@ -541,12 +542,19 @@ Create `settings/locales/[locale].json`:
 
 ```json
 {
-  "searchPlaceholder": "Search…",
-  "noResults": "No results",
-  "clearFilters": "Clear filters",
-  "featured": "Featured"
+  "searchLabel": "Search the questions",
+  "tagsLabel": "Filter by tag:",
+  "itemTags": "Tags",
+  "featured": "Featured",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "resultCount_one": "{{count}} question matches.",
+  "resultCount_other": "{{count}} questions match.",
+  "noResults": "No question matches your search."
 }
 ```
+
+Keep every locale file (`en`, `fr`, `de`, `es`) on the same keys.
 
 #### 3. Rebuild
 
@@ -560,36 +568,37 @@ yarn deploy
 
 ## ♿ Accessibility
 
-The module follows **WCAG 2.1 Level AA** guidelines:
+The module targets **WCAG 2.1 AA** and **RGAA 4.1.2**.
 
-### Keyboard Navigation
+### Structure
 
-- `Tab` - Navigate between interactive elements
-- `Enter`/`Space` - Expand/collapse FAQ items
-- `Esc` - Close expanded items (if implemented)
+- The FAQ never renders an `<h1>`: the page template owns it. The editor sets the level of the FAQ
+  title (`headingLevel`), and sections, questions and the headings inside rich text follow it
+  without skipping a level.
+- Each question is a heading that contains a disclosure button (`aria-expanded`, `aria-controls`).
+  `Enter` and `Space` open and close it.
+- Without JavaScript, every answer is visible and the search and filter controls stay hidden.
+- In edit mode, every answer is visible, so that editors can reach it.
 
-### ARIA Attributes
+### Search and filters
 
-```html
-<button aria-expanded="true" aria-controls="answer-123" aria-labelledby="question-123">
-  Question text
-</button>
-```
-
-### Screen Readers
-
-- ✅ Semantic HTML structure
-- ✅ Proper heading hierarchy
-- ✅ Descriptive ARIA labels
-- ✅ Focus management
-- ✅ Skip links support
+- The search field has a visible label.
+- A status message (`role="status"`) gives the number of matching questions, or says that none
+  matches. While the visitor types, it is updated once the typing pauses.
+- Tag filter buttons expose their state with `aria-pressed`, and show a tick when pressed.
 
 ### Visual
 
-- ✅ Sufficient color contrast (4.5:1 minimum)
-- ✅ Focus indicators visible
-- ✅ Respects `prefers-reduced-motion`
-- ✅ Responsive text sizing
+- Text colours meet 4.5:1, focus rings and control borders meet 3:1.
+- Focus is shown on every control, also in forced-colors mode.
+- Transitions stop under `prefers-reduced-motion: reduce`.
+- The layout works at 320 px wide and with increased text spacing.
+
+### Rich text
+
+Answers, the intro and section descriptions are rendered through an allow-list
+(`src/server/sanitize.ts`): editorial markup, `lang` and `dir` are kept, the editor's ids are
+prefixed, and the headings are renumbered under the heading that introduces the text.
 
 ---
 
@@ -613,9 +622,8 @@ The module follows **WCAG 2.1 Level AA** guidelines:
 **Solutions**:
 
 - Ensure FAQ items contain text content
-- Verify `<script type="application/json" data-faq-props>` exists
-- Check console for parsing errors
-- Confirm `searchPlaceholder` in locale file
+- Check the browser console for JavaScript errors
+- Search and filters are not shown in edit mode, by design
 
 ### Tag Filters Not Showing
 

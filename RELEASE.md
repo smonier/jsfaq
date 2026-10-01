@@ -1,100 +1,80 @@
-# Creating a GitHub Release
+# Releasing jsfaq
+
+A release is a Git tag `v<version>` with a GitHub release titled `Release v<version>`, whose asset
+is the packed module `jsfaq-v<version>.tgz`. The release notes come from the matching section of
+`CHANGELOG.md`.
 
 ## Prerequisites
 
-1. Install GitHub CLI: `brew install gh`
-2. Authenticate: `gh auth login`
-3. Ensure all changes are committed
+- Node 22 and Yarn 4 (`corepack enable`).
+- GitHub CLI, authenticated (`gh auth login`) with write access to `smonier/jsfaq`.
+- A clean working tree on `main`, up to date with `origin/main`.
 
-## Option 1: Automated Script (Recommended)
+## 1. Prepare the release commit
 
-```bash
-# Use current version from package.json
-./release.sh
+1. Set the new version in `package.json`, for example:
 
-# Or specify a new version
-./release.sh 0.1.0
-```
+   ```bash
+   npm version 1.2.0 --no-git-tag-version
+   ```
 
-The script will:
+2. Add a `## <version> (<YYYY-MM-DD>)` section at the top of `CHANGELOG.md`, above the previous
+   release. Everything up to the next `## ` heading becomes the release notes.
+3. Check the build locally:
 
-- ✅ Update package.json version
-- ✅ Build the module
-- ✅ Create release package
-- ✅ Commit and tag
-- ✅ Push to GitHub
-- ✅ Create GitHub release with artifact
+   ```bash
+   yarn install --immutable
+   yarn lint && yarn test && yarn build
+   ```
 
-## Option 2: Manual Release
+4. Commit `package.json` and `CHANGELOG.md`, then push to `main`.
 
-### Step 1: Update Version
+On every push, the **Build** workflow (`.github/workflows/build.yml`) builds the module, packs it
+into `dist/package.tgz` and uploads it as the `package.tgz` workflow artifact. The **CI** workflow
+runs lint, unit tests and build. Wait until both are green on the release commit.
 
-```bash
-# Update version in package.json
-npm version 0.1.0 --no-git-tag-version
+## 2. Publish the release
 
-# Or manually edit package.json
-```
+### From the CI artifact (preferred)
 
-### Step 2: Build & Package
+The asset is the package built by CI from the release commit:
 
 ```bash
-yarn build
-yarn release
+VERSION=1.2.0
+SHA=$(git rev-parse HEAD)
+RUN_ID=$(gh run list -R smonier/jsfaq --workflow build.yml --commit "$SHA" \
+  --json databaseId --jq '.[0].databaseId')
+gh run download "$RUN_ID" -R smonier/jsfaq --name package.tgz --dir /tmp/jsfaq-release
+cp /tmp/jsfaq-release/package.tgz "jsfaq-v$VERSION.tgz"
+
+awk -v version="$VERSION" '/^## / { if (found) exit; if ($2 == version) { found = 1; next } }
+  found { print } END { if (!found) exit 1 }' CHANGELOG.md > /tmp/jsfaq-notes.md
+
+git tag -a "v$VERSION" -m "Release version $VERSION"
+git push origin "v$VERSION"
+gh release create "v$VERSION" "jsfaq-v$VERSION.tgz" -R smonier/jsfaq \
+  --title "Release v$VERSION" --notes-file /tmp/jsfaq-notes.md
 ```
 
-This creates `dist/jsfaq-v0.1.0.tgz`
+### With `release.sh`
 
-### Step 3: Commit & Tag
+`./release.sh <version>` runs the whole sequence from a local build:
 
-```bash
-git add package.json
-git commit -m "chore: bump version to 0.1.0"
-git tag -a v0.1.0 -m "Release version 0.1.0"
-git push origin main
-git push origin v0.1.0
-```
+1. Reads the `## <version>` section of `CHANGELOG.md`, and stops if it is missing.
+2. Sets the version in `package.json`, builds, and packs `dist/jsfaq-v<version>.tgz`.
+3. Commits `package.json`, tags `v<version>`, and pushes `main` and the tag.
+4. Creates the GitHub release `Release v<version>` with the package as its asset, the changelog
+   section as notes, followed by the notes GitHub generates from the commits.
 
-### Step 4: Create GitHub Release
+The script commits only `package.json`: commit the `CHANGELOG.md` section before running it.
 
-```bash
-gh release create v0.1.0 \
-  dist/jsfaq-v0.1.0.tgz \
-  --title "Release v0.1.0" \
-  --notes-file RELEASE_NOTES.md \
-  --generate-notes
-```
+## 3. Check the release
 
-Or create manually:
-
-1. Go to https://github.com/smonier/jsfaq/releases/new
-2. Choose tag `v0.1.0`
-3. Set title: "Release v0.1.0"
-4. Add release notes
-5. Upload `jsfaq-v0.1.0.tgz`
-6. Publish release
-
-## Release Checklist
-
-Before creating a release:
-
-- [ ] All tests pass: `yarn lint && yarn build`
-- [ ] Version updated in `package.json`
-- [ ] `RELEASE_NOTES.md` updated with changes
-- [ ] `README.md` updated if needed
-- [ ] All changes committed
-- [ ] Working tree clean
+- The release page lists `jsfaq-v<version>.tgz` and the expected notes.
+- The package installs on a Jahia 8.2.1 or later instance (**Administration**, **Modules**).
 
 ## Versioning
 
-Follow [Semantic Versioning](https://semver.org/):
-
-- **MAJOR** (1.0.0) - Breaking changes
-- **MINOR** (0.1.0) - New features, backwards compatible
-- **PATCH** (0.0.1) - Bug fixes
-
-## After Release
-
-1. Announce on Jahia Community
-2. Update documentation site (if applicable)
-3. Test installation from release artifact
+Versions follow [Semantic Versioning](https://semver.org/): a major version for incompatible
+changes to the content model or the rendered markup, a minor version for new features, a patch
+version for fixes.

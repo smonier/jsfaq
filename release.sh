@@ -2,7 +2,9 @@
 
 # GitHub Release Script for jsfaq module
 # Usage: ./release.sh [version]
-# Example: ./release.sh 0.1.0
+# Example: ./release.sh 1.2.0
+#
+# The release notes are taken from the "## <version>" section of CHANGELOG.md.
 
 set -e
 
@@ -24,6 +26,22 @@ else
 fi
 
 echo -e "${GREEN}Creating release for version: ${NEW_VERSION}${NC}"
+
+# Extract the release notes from the CHANGELOG.md section of this version,
+# from its "## <version>" heading up to the next "## " heading.
+NOTES_FILE=$(mktemp)
+trap 'rm -f "$NOTES_FILE"' EXIT
+awk -v version="$NEW_VERSION" '
+    /^## / {
+        if (found) exit
+        if ($2 == version) { found = 1; next }
+    }
+    found { print }
+    END { if (!found) exit 1 }
+' CHANGELOG.md > "$NOTES_FILE" || {
+    echo -e "${RED}No \"## ${NEW_VERSION}\" section found in CHANGELOG.md. Add it before releasing.${NC}" >&2
+    exit 1
+}
 
 # Update version in package.json
 echo "Updating package.json version..."
@@ -57,9 +75,9 @@ echo "Creating GitHub release..."
 gh release create "v${NEW_VERSION}" \
     "$PACKAGE_FILE" \
     --title "Release v${NEW_VERSION}" \
-    --notes-file RELEASE_NOTES.md \
+    --notes-file "$NOTES_FILE" \
     --generate-notes
 
-echo -e "${GREEN}✅ Release v${NEW_VERSION} created successfully!${NC}"
+echo -e "${GREEN}Release v${NEW_VERSION} created successfully!${NC}"
 echo -e "Package: ${PACKAGE_FILE}"
 echo -e "View release: https://github.com/smonier/jsfaq/releases/tag/v${NEW_VERSION}"

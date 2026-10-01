@@ -313,7 +313,7 @@ The `FaqPage.client.tsx` Island component provides:
 
 - ⚡ **Search** with keyword highlighting
 - 🎯 **Filtering** by tags
-- 📂 **Expand/Collapse** functionality
+- 📂 **Expand all / Collapse all** (each question is a native `<details>` disclosure, which opens and closes without the script)
 - ✨ **Visual feedback** for active states
 - 🔄 **State management** for user interactions
 
@@ -340,6 +340,7 @@ JAHIA_PASSWORD=your-password
 | `yarn package` | Create deployment package (.tgz)             |
 | `yarn deploy`  | Deploy to Jahia instance                     |
 | `yarn lint`    | Run ESLint code quality checks               |
+| `yarn test`    | Run the unit tests (Vitest)                  |
 | `yarn format`  | Format code with Prettier                    |
 | `yarn clean`   | Remove build artifacts                       |
 
@@ -401,7 +402,7 @@ The module uses **CSS Modules** with scoped class names. To customize:
 | `.jsfaq__header`     | Header section                    |
 | `.jsfaq__search`     | Search bar container              |
 | `.jsfaq-item`        | Individual FAQ item               |
-| `.jsfaq-item--open`  | Opened item state                 |
+| `.jsfaq-item[open]`  | Opened item state                 |
 | `.jsfaq-item__tag`   | Tag badges (0.75rem, 12px radius) |
 | `.jsfaq-tag`         | Tag filter buttons                |
 | `.jsfaq-tag--active` | Active/selected tag state         |
@@ -575,9 +576,13 @@ The module targets **WCAG 2.1 AA** and **RGAA 4.1.2**.
 - The FAQ never renders an `<h1>`: the page template owns it. The editor sets the level of the FAQ
   title (`headingLevel`), and sections, questions and the headings inside rich text follow it
   without skipping a level.
-- Each question is a heading that contains a disclosure button (`aria-expanded`, `aria-controls`).
-  `Enter` and `Space` open and close it.
-- Without JavaScript, every answer is visible and the search and filter controls stay hidden.
+- Each question is a native disclosure: a `<details>` element whose `<summary>` holds the question
+  heading. `Enter` and `Space` open and close it, and the browser exposes its expanded state.
+- Without JavaScript, the questions still open and close, and the search and filter controls are
+  hidden. With JavaScript, the controls are shown from the first paint, so nothing moves when the
+  FAQ script starts.
+- A link to a question (`#q-<id>`) opens it and moves the focus to it, and shows it again if the
+  search or a tag had hidden it.
 - In edit mode, every answer is visible, so that editors can reach it.
 
 ### Search and filters
@@ -597,8 +602,11 @@ The module targets **WCAG 2.1 AA** and **RGAA 4.1.2**.
 ### Rich text
 
 Answers, the intro and section descriptions are rendered through an allow-list
-(`src/server/sanitize.ts`): editorial markup, `lang` and `dir` are kept, the editor's ids are
-prefixed, and the headings are renumbered under the heading that introduces the text.
+(`src/server/sanitize.ts`): editorial markup and the `lang`, `dir` and
+`id` of any element are kept. The editor's ids are prefixed per block, and so are the anchors that
+point at them; anchors to other targets of the page (another question, `#q-<id>`) are kept as
+written. Headings are renumbered under the heading that introduces the text. An image without a
+text alternative gets an empty one, and edit mode tells the editor.
 
 ---
 
@@ -610,10 +618,9 @@ prefixed, and the headings are renumbered under the heading that introduces the 
 
 **Solutions**:
 
-- Clear browser cache and reload
-- Check browser console for JavaScript errors
-- Verify client bundle loaded: `/modules/jsfaq/dist/client/components/FaqPage/FaqPage.client.tsx.js`
-- Check `data-faq-root` attribute exists on container
+- Questions open and close natively (`<details>`), even without JavaScript: check that the theme
+  does not hide `summary` or reset `details` display
+- In edit mode, every answer is shown open, by design
 
 ### Search Not Working
 

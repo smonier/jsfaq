@@ -21,6 +21,7 @@ controls when scripts run, and publishes the questions as schema.org `FAQPage` s
 - [Internationalisation](#internationalisation)
 - [Development](#development)
 - [Changelog](#changelog)
+- [License](#license)
 
 ## Features
 
@@ -409,3 +410,7 @@ yarn build && yarn package && yarn deploy
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Released under the [MIT License](LICENSE).

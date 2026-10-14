@@ -41,7 +41,7 @@ controls when scripts run, and publishes the questions as schema.org `FAQPage` s
   settings are.
 - **schema.org `FAQPage` JSON-LD** that matches the visible questions.
 - **Theming through CSS custom properties.**
-- **Translations** in English, French, German and Spanish.
+- **Translations** in English, French, German and Spanish for editors and visitors, and European Portuguese for visitors.
 
 ## Requirements
 
@@ -307,12 +307,12 @@ light pair by default, readable in both schemes.
 
 ## Internationalisation
 
-Two kinds of strings are shipped, in English, French, German and Spanish:
+Two kinds of strings are shipped. Editor labels are in English, French, German and Spanish; visitor-facing strings are also in European Portuguese (there is no `jsfaq_pt.properties`: editors work in the four other languages):
 
 | Strings                                                          | Location                                                                            |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Editor labels and tooltips (content types)                       | `settings/resources/jsfaq.properties` (English), `jsfaq_fr`, `jsfaq_de`, `jsfaq_es` |
-| Visitor-facing strings (search, filters, status messages, badge) | `settings/locales/en.json`, `fr.json`, `de.json`, `es.json`                         |
+| Visitor-facing strings (search, filters, status messages, badge) | `settings/locales/en.json`, `fr.json`, `de.json`, `es.json`, `pt.json`              |
 
 Content is translated per field: the title, introduction, section title and description,
 question and answer are translatable; the heading level, tag filter switch, featured flag and tags
@@ -393,7 +393,7 @@ yarn build && yarn package && yarn deploy
 ├── settings/
 │   ├── definitions.cnd      Namespaces and the jsfaqmix:component mixin
 │   ├── content-types-icons/ Icon of the FAQ Components group
-│   ├── locales/             Visitor-facing strings (en, fr, de, es)
+│   ├── locales/             Visitor-facing strings (en, fr, de, es, pt)
 │   └── resources/           Editor labels and tooltips (en, fr, de, es)
 └── src/
     ├── components/

@@ -1,0 +1,12 @@
+{
+  "searchLabel": "Pesquisar nas perguntas",
+  "tagsLabel": "Filtrar por etiqueta:",
+  "itemTags": "Etiquetas",
+  "featured": "Em destaque",
+  "expandAll": "Expandir tudo",
+  "collapseAll": "Recolher tudo",
+  "resultCount_one": "{{count}} pergunta corresponde.",
+  "resultCount_other": "{{count}} perguntas correspondem.",
+  "noResults": "Nenhuma pergunta corresponde à pesquisa.",
+  "imageWithoutAlt": "Uma imagem deste texto não tem alternativa textual: editar a imagem no editor de texto formatado e descrevê-la, ou marcá-la como decorativa com um texto vazio."
+}

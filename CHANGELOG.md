@@ -1,5 +1,10 @@
 # jsfaq Changelog
 
+## Unreleased
+
+- European Portuguese (pt) visitor-facing labels (`settings/locales/pt.json`). Editor labels stay in English, French, German and Spanish.
+- A unit test checks that every locale file has the keys and placeholders of `en.json`.
+
 ## 1.1.1 (2026-10-01)
 
 ### Fixes
